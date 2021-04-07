@@ -161,6 +161,7 @@ namespace leveledlistgenerator
 
         private static IEnumerable<TMinor> FindEntries<TMajor, TMinor>(TMajor baseRecord, IEnumerable<TMajor> overrides, Func<TMajor, IEnumerable<TMinor>?> entrySelector) where TMajor : class, IMajorRecordGetter, IEquatable<IFormLinkGetter>
         {
+            int itemCount = 0;
             List<TMinor> itemsAdded = new();
             List<TMinor> itemsRemoved = new();
             List<TMinor> itemsReplaced = new();
@@ -184,18 +185,20 @@ namespace leveledlistgenerator
                 itemsIntersected = ImmutableList.CreateRange(itemsIntersected.IntersectWith(intersection));
             }
 
+            foreach (var item in itemsIntersected)
+            {
+                if (itemCount++ < 255) yield return item;
+            }
+
             foreach (var item in itemsAdded)
             {
                 if (itemsReplaced.Remove(item))
                     continue;
 
                 if (itemsRemoved.Remove(item) is false)
-                    yield return item;
-            }
-
-            foreach (var item in itemsIntersected)
-            {
-                yield return item;
+                {
+                    if (itemCount++ < 255) yield return item;
+                }
             }
         }
 
