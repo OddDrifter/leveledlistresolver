@@ -29,8 +29,11 @@ namespace leveledlistgenerator
             var leveledItems = loadOrder.PriorityOrder.OnlyEnabled().WinningOverrides<ILeveledItemGetter>();
             var leveledItemsMask = new LeveledItem.TranslationMask(defaultOn: true) 
                 { FormVersion = false, VersionControl = false, Version2 = false, Entries = false };
+            var leveledItemsToOverride = FindRecordsToOverride(state.LinkCache, leveledItems.ToArray());
 
-            foreach (var (baseRecord, overrides) in FindRecordsToOverride(state.LinkCache, leveledItems.ToArray()))
+            Console.WriteLine($"Found {leveledItemsToOverride.Count()} LeveledItem(s) to override");
+
+            foreach (var (baseRecord, overrides) in leveledItemsToOverride)
             {
                 var copy = baseRecord.DeepCopy();
 
@@ -57,6 +60,7 @@ namespace leveledlistgenerator
                 if (itemsRemoved == 0 && copy.Equals(overrides.Last(), leveledItemsMask) && 
                     copy.Entries.IntersectWith(overrides.Last().Entries.EmptyIfNull()).CompareCount(copy.Entries) == 0)
                 {
+                    Console.WriteLine($"Skipping [{copy.FormKey}] {copy.EditorID}");
                     continue;
                 }
 
@@ -66,8 +70,11 @@ namespace leveledlistgenerator
             var leveledNpcs = loadOrder.PriorityOrder.OnlyEnabled().WinningOverrides<ILeveledNpcGetter>();
             var leveledNpcsMask = new LeveledNpc.TranslationMask(defaultOn: true)
                 { FormVersion = false, VersionControl = false, Version2 = false, Entries = false };
+            var leveledNpcsToOverride = FindRecordsToOverride(state.LinkCache, leveledNpcs.ToArray());
 
-            foreach (var (baseRecord, overrides) in FindRecordsToOverride(state.LinkCache, leveledNpcs.ToArray()))
+            Console.WriteLine($"\nFound {leveledNpcsToOverride.Count()} LeveledNpc(s) to override");
+
+            foreach (var (baseRecord, overrides) in leveledNpcsToOverride)
             {
                 var copy = baseRecord.DeepCopy(leveledNpcsMask);
 
@@ -94,6 +101,7 @@ namespace leveledlistgenerator
                 if (itemsRemoved == 0 && copy.Equals(overrides.Last(), leveledNpcsMask) &&
                     copy.Entries.IntersectWith(overrides.Last().Entries.EmptyIfNull()).CompareCount(copy.Entries) == 0)
                 {
+                    Console.WriteLine($"Skipping [{copy.FormKey}] {copy.EditorID}");
                     continue;
                 }
 
@@ -102,6 +110,8 @@ namespace leveledlistgenerator
 
             //var leveledSpells = loadOrder.PriorityOrder.OnlyEnabled().WinningOverrides<ILeveledSpellGetter>()
             //    .TryFindOverrides<ILeveledSpellGetter, ILeveledSpellEntryGetter>(state.LinkCache);
+
+            Console.WriteLine("\nReport any issues at https://github.com/OddDrifter/leveledlistgenerator/issues \n");
         }
 
         static IEnumerable<T> ExceptWith<T>(this IEnumerable<T> lhs, IEnumerable<T> rhs)
@@ -159,7 +169,7 @@ namespace leveledlistgenerator
             return sequence.Select(func).Where(value => baseValue.Equals(value) is false).DefaultIfEmpty(baseValue).Last();
         }
 
-        private static IEnumerable<TMinor> FindEntries<TMajor, TMinor>(TMajor baseRecord, IEnumerable<TMajor> overrides, Func<TMajor, IEnumerable<TMinor>?> entrySelector) where TMajor : class, IMajorRecordGetter, IEquatable<IFormLinkGetter>
+        private static IEnumerable<TMinor> FindEntries<TMajor, TMinor>(TMajor baseRecord, IEnumerable<TMajor> overrides, Func<TMajor, IEnumerable<TMinor>?> entrySelector) where TMajor : class, IMajorRecordGetter
         {
             int itemCount = 0;
             List<TMinor> itemsAdded = new();
@@ -202,11 +212,16 @@ namespace leveledlistgenerator
             }
         }
 
+
         private static IEnumerable<(ILeveledItemGetter, IEnumerable<ILeveledItemGetter>)> FindRecordsToOverride(ILinkCache<ISkyrimMod, ISkyrimModGetter> linkCache, params ILeveledItemGetter[] getters)
         {
             foreach (var getter in getters)
             {
                 var records = getter.AsLink().ResolveAll(linkCache).Reverse().ToArray();
+
+                if (records.Length <= 1)
+                    continue;
+
                 if (records[1..].Window(2).Any(window => window[0].Entries?.ToImmutableHashSet().IsSubsetOf(window[^1].Entries.EmptyIfNull()) is false))
                 {
                     yield return (records[0], records);
@@ -219,6 +234,10 @@ namespace leveledlistgenerator
             foreach (var getter in getters)
             {
                 var records = getter.AsLink().ResolveAll(linkCache).Reverse().ToArray();
+
+                if (records.Length <= 1) 
+                    continue;
+
                 if (records[1..].Window(2).Any(window => window[0].Entries?.ToImmutableHashSet().IsSubsetOf(window[^1].Entries.EmptyIfNull()) is false))
                 {
                     yield return (records[0], records);
