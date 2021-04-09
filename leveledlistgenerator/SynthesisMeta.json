@@ -1,6 +1,6 @@
 {
-  "Nickname": "leveledlistgenerator",
-  "Visibility": "Visible",
+  "Nickname": "leveledlistresolver",
+  "Visibility": "Exclude",
   "OneLineDescription": "Patcher for resolving levelled list conflicts. WIP",
   "LongDescription": "",
   "PreferredAutoVersioning": "Default",
