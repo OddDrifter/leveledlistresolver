@@ -35,25 +35,18 @@ namespace leveledlistgenerator
 
             foreach (var (baseRecord, overrides) in leveledItemsToOverride)
             {
+                Console.WriteLine("\n" + baseRecord.EditorID);
+
                 var copy = baseRecord.DeepCopy();
+                var graph = new LeveledItemGraph(state, copy.FormKey);
 
                 copy.FormVersion = 44;
-                copy.EditorID = FindEditorID(baseRecord, overrides);
-                copy.ChanceNone = FindChanceNone(baseRecord.ChanceNone, overrides, record => record.ChanceNone);
-                copy.Entries = FindEntries(baseRecord, overrides, record => record.Entries).Select(r => r.DeepCopy()).ToExtendedList();
-                copy.Global = overrides.Where(record => record.Global != baseRecord.Global).DefaultIfEmpty(baseRecord).Last().Global.AsNullable();
-
-                foreach (var leveledItem in overrides.Where(record => record.Flags != baseRecord.Flags))
-                {
-                    foreach (var flag in Enum.GetValues<LeveledItem.Flag>())
-                    {
-                        if ((leveledItem.Flags & flag) == flag) 
-                            copy.Flags |= flag;
-
-                        if ((~leveledItem.Flags & baseRecord.Flags & flag) == flag) 
-                            copy.Flags &= ~flag;
-                    }
-                }
+                copy.EditorID = graph.GetEditorId();
+                //Todo: Actually handle there being more than 255 items.
+                copy.Entries = graph.GetEntries().Select(record => record.DeepCopy()).Take(255).ToExtendedList();
+                copy.ChanceNone = graph.GetChanceNone();
+                copy.Global = graph.GetGlobal();
+                copy.Flags = graph.GetFlags();
 
                 var itemsRemoved = copy.Entries.RemoveAll(entry => IsNullOrEmptySublist(entry, state.LinkCache));
 
@@ -67,7 +60,7 @@ namespace leveledlistgenerator
                 state.PatchMod.LeveledItems.Set(copy);
             }
 
-            var leveledNpcs = loadOrder.PriorityOrder.OnlyEnabled().WinningOverrides<ILeveledNpcGetter>();
+            /*var leveledNpcs = loadOrder.PriorityOrder.OnlyEnabled().WinningOverrides<ILeveledNpcGetter>();
             var leveledNpcsMask = new LeveledNpc.TranslationMask(defaultOn: true)
                 { FormVersion = false, VersionControl = false, Version2 = false, Entries = false };
             var leveledNpcsToOverride = FindRecordsToOverride(state.LinkCache, leveledNpcs.ToArray());
@@ -106,117 +99,20 @@ namespace leveledlistgenerator
                 }
 
                 state.PatchMod.LeveledNpcs.Set(copy);
-            }
+            }*/
 
-            //var leveledSpells = loadOrder.PriorityOrder.OnlyEnabled().WinningOverrides<ILeveledSpellGetter>()
-            //    .TryFindOverrides<ILeveledSpellGetter, ILeveledSpellEntryGetter>(state.LinkCache);
+            /*var leveledSpells = loadOrder.PriorityOrder.OnlyEnabled().WinningOverrides<ILeveledSpellGetter>()
+                .TryFindOverrides<ILeveledSpellGetter, ILeveledSpellEntryGetter>(state.LinkCache);*/
 
             Console.WriteLine("\nReport any issues at https://github.com/OddDrifter/leveledlistgenerator/issues \n");
         }
-
-        static IEnumerable<T> ExceptWith<T>(this IEnumerable<T> lhs, IEnumerable<T> rhs)
-        {
-            _ = lhs ?? throw new ArgumentNullException(nameof(lhs));
-            _ = rhs ?? throw new ArgumentNullException(nameof(rhs));
-
-            if (!lhs.Any())
-                yield break;
-
-            var items = rhs.ToList();
-            foreach (var item in lhs)
-            {
-                if (items.Remove(item))
-                    continue;
-                yield return item;
-            }
-        }
-
-        static IEnumerable<T> IntersectWith<T>(this IEnumerable<T> lhs, IEnumerable<T> rhs) 
-        {
-            _ = lhs ?? throw new ArgumentNullException(nameof(lhs));
-            _ = rhs ?? throw new ArgumentNullException(nameof(rhs));
-
-            if (!lhs.Any() || !rhs.Any())
-                yield break;
-
-            var items = rhs.ToList();
-            foreach (var item in lhs)
-            {
-                if (items.Remove(item))
-                {
-                    yield return item;
-                    if (!items.Any()) 
-                        yield break;
-                }
-            }
-        }
-
-        private static string FindEditorID<T>(T baseRecord, IEnumerable<T> overrides) where T : class, IMajorRecordGetter
-        {
-            if (overrides.LastOrDefault(value => !string.IsNullOrEmpty(value.EditorID) && value.EditorID.Equals(baseRecord.EditorID, StringComparison.InvariantCulture) is false) is string editorId)
-            {
-                return editorId;
-            }
-            else if (string.IsNullOrEmpty(baseRecord.EditorID) is false)
-            {
-                return baseRecord.EditorID!;
-            }
-            return Guid.NewGuid().ToString();
-        }
-
-        private static T FindChanceNone<T, U>(T baseValue, IEnumerable<U> sequence, Func<U, T> func) where T : unmanaged
-        {
-            return sequence.Select(func).Where(value => baseValue.Equals(value) is false).DefaultIfEmpty(baseValue).Last();
-        }
-
-        private static IEnumerable<TMinor> FindEntries<TMajor, TMinor>(TMajor baseRecord, IEnumerable<TMajor> overrides, Func<TMajor, IEnumerable<TMinor>?> entrySelector) where TMajor : class, IMajorRecordGetter
-        {
-            int itemCount = 0;
-            List<TMinor> itemsAdded = new();
-            List<TMinor> itemsRemoved = new();
-            List<TMinor> itemsReplaced = new();
-            ImmutableList<TMinor> itemsIntersected = ImmutableList.CreateRange(entrySelector(baseRecord) ?? Array.Empty<TMinor>());
-            
-            foreach (var window in overrides.Select(entrySelector).Select(EnumerableExt.EmptyIfNull).Window(2))
-            {
-                var left = window[0];
-                var right = window[^1];
-
-                var intersection = left.IntersectWith(right);
-                var added = right.ExceptWith(intersection);
-                var removed = left.ExceptWith(intersection);
-
-                if (added.CompareCount(removed) == 0)
-                    itemsReplaced.AddRange(removed);
-
-                itemsAdded.AddRange(added);
-                itemsRemoved.AddRange(removed.IntersectWith(itemsIntersected));
-
-                itemsIntersected = ImmutableList.CreateRange(itemsIntersected.IntersectWith(intersection));
-            }
-
-            foreach (var item in itemsIntersected)
-            {
-                if (itemCount++ < 255) yield return item;
-            }
-
-            foreach (var item in itemsAdded)
-            {
-                if (itemsReplaced.Remove(item))
-                    continue;
-
-                if (itemsRemoved.Remove(item) is false)
-                {
-                    if (itemCount++ < 255) yield return item;
-                }
-            }
-        }
-
 
         private static IEnumerable<(ILeveledItemGetter, IEnumerable<ILeveledItemGetter>)> FindRecordsToOverride(ILinkCache<ISkyrimMod, ISkyrimModGetter> linkCache, params ILeveledItemGetter[] getters)
         {
             foreach (var getter in getters)
             {
+                //Todo: Should also check EditorID, Flags, and Global
+                //Todo: Use Graph Instead
                 var records = getter.AsLink().ResolveAll(linkCache).Reverse().ToArray();
 
                 if (records.Length <= 1)
@@ -233,6 +129,7 @@ namespace leveledlistgenerator
         {
             foreach (var getter in getters)
             {
+                //Todo: Should also check EditorID, Flags, and Global
                 var records = getter.AsLink().ResolveAll(linkCache).Reverse().ToArray();
 
                 if (records.Length <= 1) 
