@@ -33,7 +33,7 @@ namespace leveledlistgenerator
 
             Console.WriteLine($"Found {leveledItemsToOverride.Count()} LeveledItem(s) to override");
 
-            foreach (var (baseRecord, overrides) in leveledItemsToOverride)
+            foreach (var (baseRecord, winner) in leveledItemsToOverride)
             {
                 Console.WriteLine("\n" + baseRecord.EditorID);
 
@@ -50,8 +50,8 @@ namespace leveledlistgenerator
 
                 var itemsRemoved = copy.Entries.RemoveAll(entry => IsNullOrEmptySublist(entry, state.LinkCache));
 
-                if (itemsRemoved == 0 && copy.Equals(overrides.Last(), leveledItemsMask) && 
-                    copy.Entries.IntersectWith(overrides.Last().Entries.EmptyIfNull()).CompareCount(copy.Entries) == 0)
+                if (itemsRemoved == 0 && copy.Equals(winner, leveledItemsMask) && 
+                    copy.Entries.IntersectWith(winner.Entries.EmptyIfNull()).CompareCount(copy.Entries) == 0)
                 {
                     Console.WriteLine($"Skipping [{copy.FormKey}] {copy.EditorID}");
                     continue;
@@ -107,7 +107,7 @@ namespace leveledlistgenerator
             Console.WriteLine("\nReport any issues at https://github.com/OddDrifter/leveledlistgenerator/issues \n");
         }
 
-        private static IEnumerable<(ILeveledItemGetter, IEnumerable<ILeveledItemGetter>)> FindRecordsToOverride(ILinkCache<ISkyrimMod, ISkyrimModGetter> linkCache, params ILeveledItemGetter[] getters)
+        private static IEnumerable<(ILeveledItemGetter, ILeveledItemGetter)> FindRecordsToOverride(ILinkCache<ISkyrimMod, ISkyrimModGetter> linkCache, params ILeveledItemGetter[] getters)
         {
             foreach (var getter in getters)
             {
@@ -120,7 +120,7 @@ namespace leveledlistgenerator
 
                 if (records[1..].Window(2).Any(window => window[0].Entries?.ToImmutableHashSet().IsSubsetOf(window[^1].Entries.EmptyIfNull()) is false))
                 {
-                    yield return (records[0], records);
+                    yield return (records[0], records[^1]);
                 }
             }
         }
