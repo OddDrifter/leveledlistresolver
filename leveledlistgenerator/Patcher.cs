@@ -103,7 +103,6 @@ namespace leveledlistgenerator
             foreach (var getter in getters)
             {
                 //Todo: Should also check EditorID, Flags, and Global
-                //Todo: Use Graph Instead
                 var records = getter.AsLink().ResolveAll(linkCache).Reverse().ToArray();
 
                 if (records.Length <= 1)

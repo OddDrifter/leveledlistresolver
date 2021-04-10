@@ -19,19 +19,20 @@ namespace leveledlistgenerator
         ILeveledNpcGetter Base { get; }
         ImmutableHashSet<ModKey> ModKeys { get; }
         Dictionary<ModKey, HashSet<ModKey>> Graph { get; }
-        ImmutableDictionary<ModKey, IModListing<ISkyrimModGetter>> Mods { get; }
+        ImmutableDictionary<ModKey, ILeveledNpcGetter> Records { get; }
+        ImmutableHashSet<ILeveledNpcGetter> ExtentRecords { get; }
 
         public LeveledNpcGraph(IPatcherState<ISkyrimMod, ISkyrimModGetter> state, FormKey formKey)
         {
             var linkCache = state.LinkCache;
             var loadOrder = state.LoadOrder.PriorityOrder.OnlyEnabled();
             var listings = loadOrder.Where(plugin => plugin.Mod is not null && plugin.Mod.LeveledNpcs.ContainsKey(formKey)).Reverse();
+            var recordBuilder = ImmutableDictionary.CreateBuilder<ModKey, ILeveledNpcGetter>();
 
             FormKey = formKey;
             Base = formKey.AsLink<ILeveledNpcGetter>().ResolveAll(linkCache).Last();
             ModKeys = listings.Select(plugin => plugin.ModKey).ToImmutableHashSet();
-            Graph = new() { { ModKey.Null, new() } };
-            Mods = listings.ToImmutableDictionary(mod => mod.ModKey);
+            Graph = new() { { ModKey.Null, new() } };           
 
             foreach (var listing in listings)
             {
@@ -53,18 +54,26 @@ namespace leveledlistgenerator
                             Graph[key].Add(mod.ModKey);
                         }
                     }
+                    recordBuilder.Add(mod.ModKey, mod.LeveledNpcs[FormKey]);
                 }
             }
+
+            Records = recordBuilder.ToImmutable();
+
+            var extentRecordBuilder = ImmutableHashSet.CreateBuilder<ILeveledNpcGetter>();
 
             foreach (var (_, values) in Graph)
             {
                 foreach (var value in values)
                 {
                     var _ = Graph[value];
+                    if (_.Count == 0)
+                        extentRecordBuilder.Add(Records[value]);
                     values.ExceptWith(_.Intersect(values));
                 }
             }
 
+            ExtentRecords = extentRecordBuilder.ToImmutable();
             Traverse();
         }
 
@@ -86,7 +95,7 @@ namespace leveledlistgenerator
             {
                 foreach (var value in values)
                 {
-                    if (Graph[value].Any() is false)
+                    if (Graph[value].Count == 0)
                         endPoints.Add(value);
                 }
             }
@@ -117,73 +126,46 @@ namespace leveledlistgenerator
 
         public string GetEditorId()
         {
-            var paths = Traverse();
-            var records = paths.Select(path => path.Last()).Distinct()
-                .Select(key => Mods[key].Mod!.LeveledNpcs[FormKey])
-                .Select(record => record.EditorID);
-
-            return records.Where(id => id is not null && !id.Equals(Base.EditorID, StringComparison.InvariantCulture)).LastOrDefault() ?? Base.EditorID ?? Guid.NewGuid().ToString();
+            var values = ExtentRecords.Select(record => record.EditorID);
+            return values.Where(id => id is not null && !id.Equals(Base.EditorID, StringComparison.InvariantCulture)).LastOrDefault() ?? Base.EditorID ?? Guid.NewGuid().ToString();
         }
 
         public byte GetChanceNone()
         {
-            var paths = Traverse();
-            var records = paths.Select(path => path.Last()).Distinct()
-                .Select(key => Mods[key].Mod!.LeveledNpcs[FormKey])
-                .Select(record => record.ChanceNone);
-
-            return records.Where(chanceNone => chanceNone != Base.ChanceNone).DefaultIfEmpty(Base.ChanceNone).Last();
+            var values = ExtentRecords.Select(record => record.ChanceNone);
+            return values.Where(chanceNone => chanceNone != Base.ChanceNone).DefaultIfEmpty(Base.ChanceNone).Last();
         }
 
         public IFormLinkNullable<IGlobalGetter> GetGlobal()
         {
-            var paths = Traverse();
-            var records = paths.Select(path => path.Last()).Distinct()
-                .Select(key => Mods[key].Mod!.LeveledNpcs[FormKey])
-                .Select(record => record.Global);
-
-            return records.Where(global => global != Base.Global).DefaultIfEmpty(Base.Global).Last().AsNullable();
+            var values = ExtentRecords.Select(record => record.Global);
+            return values.Where(global => global != Base.Global).DefaultIfEmpty(Base.Global).Last().AsNullable();
         }
 
         public IEnumerable<ILeveledNpcEntryGetter> GetEntries()
         {
-            var paths = Traverse();
-            var keys = paths.Select(path => path.Last()).Distinct();
-            var records = keys.Select(key => Mods[key].Mod!.LeveledNpcs[FormKey]);
-
-            if (records.Count() == 1)
-                return records.Last().Entries ?? Array.Empty<ILeveledNpcEntryGetter>();
+            if (ExtentRecords.Count == 1)
+                return ExtentRecords.First().Entries ?? Array.Empty<ILeveledNpcEntryGetter>();
 
             var baseEntries = Base.Entries ?? Array.Empty<ILeveledNpcEntryGetter>();
+            var entriesList = ExtentRecords.Select(list => list.Entries ?? Array.Empty<ILeveledNpcEntryGetter>());
 
-            List<ILeveledNpcEntryGetter> itemsAdded = new();
-
-            var itemIntersection = records.Skip(1).Aggregate(ImmutableList.CreateRange(records.First().Entries.EmptyIfNull()), (list, item) => {
-                return list.IntersectWith(item.Entries.EmptyIfNull()).ToImmutableList();
+            var added = entriesList.Skip(1).Aggregate(ImmutableList.CreateRange(entriesList.First().ExceptWith(baseEntries)), (list, items) => {
+                var toAdd = items.ExceptWith(baseEntries).ExceptWith(list);
+                return list.AddRange(toAdd);
             });
 
-            var addedIntersection = records.Skip(1).Aggregate(ImmutableList.CreateRange(records.First().Entries.EmptyIfNull().ExceptWith(baseEntries)), (list, item) => {
-                return list.IntersectWith(item.Entries.EmptyIfNull().ExceptWith(baseEntries)).ToImmutableList();
+            var intersection = entriesList.Aggregate(ImmutableList.CreateRange(baseEntries), (list, items) => {
+                return list.IntersectWith(items).ToImmutableList();
             });
 
-            foreach (var record in records)
-            {
-                var entries = record.Entries.EmptyIfNull().ExceptWith(baseEntries).ExceptWith(addedIntersection);
-                itemsAdded.AddRange(entries);
-            }
-
-            //Todo: Fix Similar Paths (Maybe not worthwhile); Probably requires finding overlaps.
-            return itemsAdded.And(itemIntersection);
+            return added.Concat(intersection);
         }
 
         public LeveledNpc.Flag GetFlags()
         {
-            var paths = Traverse();
-            var records = paths.Select(path => path.Last()).Distinct()
-                .Select(key => Mods[key].Mod!.LeveledNpcs[FormKey])
-                .Select(record => record.Flags);
-
-            return records.Where(flag => flag != Base.Flags).DefaultIfEmpty(Base.Flags).Last();
+            var values = ExtentRecords.Select(record => record.Flags);
+            return values.Where(flag => flag != Base.Flags).DefaultIfEmpty(Base.Flags).Last();
         }
     }
 }
