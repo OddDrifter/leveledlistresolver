@@ -50,8 +50,7 @@ namespace leveledlistgenerator
 
                 var itemsRemoved = copy.Entries.RemoveAll(entry => IsNullOrEmptySublist(entry, state.LinkCache));
 
-                if (itemsRemoved == 0 && copy.Equals(winner, leveledItemsMask) && 
-                    copy.Entries.IntersectWith(winner.Entries.EmptyIfNull()).CompareCount(copy.Entries) == 0)
+                if (itemsRemoved == 0 && copy.Equals(winner, leveledItemsMask) && copy.Entries.IntersectWith(winner.Entries.EmptyIfNull()).CompareCount(copy.Entries) == 0)
                 {
                     Console.WriteLine($"Skipping [{copy.FormKey}] {copy.EditorID}");
                     continue;
@@ -60,46 +59,38 @@ namespace leveledlistgenerator
                 state.PatchMod.LeveledItems.Set(copy);
             }
 
-            /*var leveledNpcs = loadOrder.PriorityOrder.OnlyEnabled().WinningOverrides<ILeveledNpcGetter>();
+            var leveledNpcs = loadOrder.PriorityOrder.OnlyEnabled().WinningOverrides<ILeveledNpcGetter>();
             var leveledNpcsMask = new LeveledNpc.TranslationMask(defaultOn: true)
                 { FormVersion = false, VersionControl = false, Version2 = false, Entries = false };
             var leveledNpcsToOverride = FindRecordsToOverride(state.LinkCache, leveledNpcs.ToArray());
 
             Console.WriteLine($"\nFound {leveledNpcsToOverride.Count()} LeveledNpc(s) to override");
 
-            foreach (var (baseRecord, overrides) in leveledNpcsToOverride)
+            foreach (var (baseRecord, winning) in leveledNpcsToOverride)
             {
-                var copy = baseRecord.DeepCopy(leveledNpcsMask);
+                Console.WriteLine("\n" + baseRecord.EditorID);
+
+                var copy = baseRecord.DeepCopy();
+                var graph = new LeveledNpcGraph(state, baseRecord.FormKey);
 
                 copy.FormVersion = 44;
-                copy.EditorID = FindEditorID(baseRecord, overrides);
-                copy.ChanceNone = FindChanceNone(baseRecord.ChanceNone, overrides, record => record.ChanceNone);
-                copy.Entries = FindEntries(baseRecord, overrides, record => record.Entries).Select(r => r.DeepCopy()).ToExtendedList();
-                copy.Global = overrides.Where(record => record.Global != baseRecord.Global).DefaultIfEmpty(baseRecord).Last().Global.AsNullable();
-
-                foreach (var leveledNpc in overrides.Where(record => record.Flags != baseRecord.Flags))
-                {
-                    foreach (var flag in Enum.GetValues<LeveledNpc.Flag>())
-                    {
-                        if ((leveledNpc.Flags & flag) == flag) 
-                            copy.Flags |= flag;
-
-                        if ((~leveledNpc.Flags & baseRecord.Flags & flag) == flag) 
-                            copy.Flags &= ~flag;
-                    }
-                }
+                copy.EditorID = graph.GetEditorId();
+                copy.ChanceNone = graph.GetChanceNone();
+                //Todo: Actually handle there being more than 255 items.
+                copy.Entries = graph.GetEntries().Select(r => r.DeepCopy()).Take(255).ToExtendedList();
+                copy.Global = graph.GetGlobal();
+                copy.Flags = graph.GetFlags();
 
                 var itemsRemoved = copy.Entries.RemoveAll(entry => IsNullOrEmptySublist(entry, state.LinkCache));
 
-                if (itemsRemoved == 0 && copy.Equals(overrides.Last(), leveledNpcsMask) &&
-                    copy.Entries.IntersectWith(overrides.Last().Entries.EmptyIfNull()).CompareCount(copy.Entries) == 0)
+                if (itemsRemoved == 0 && copy.Equals(winning, leveledNpcsMask) && copy.Entries.IntersectWith(winning.Entries.EmptyIfNull()).CompareCount(copy.Entries) == 0)
                 {
                     Console.WriteLine($"Skipping [{copy.FormKey}] {copy.EditorID}");
                     continue;
                 }
 
                 state.PatchMod.LeveledNpcs.Set(copy);
-            }*/
+            }
 
             /*var leveledSpells = loadOrder.PriorityOrder.OnlyEnabled().WinningOverrides<ILeveledSpellGetter>()
                 .TryFindOverrides<ILeveledSpellGetter, ILeveledSpellEntryGetter>(state.LinkCache);*/
@@ -125,7 +116,7 @@ namespace leveledlistgenerator
             }
         }
 
-        private static IEnumerable<(ILeveledNpcGetter, IEnumerable<ILeveledNpcGetter>)> FindRecordsToOverride(ILinkCache<ISkyrimMod, ISkyrimModGetter> linkCache, params ILeveledNpcGetter[] getters)
+        private static IEnumerable<(ILeveledNpcGetter, ILeveledNpcGetter)> FindRecordsToOverride(ILinkCache<ISkyrimMod, ISkyrimModGetter> linkCache, params ILeveledNpcGetter[] getters)
         {
             foreach (var getter in getters)
             {
@@ -137,7 +128,7 @@ namespace leveledlistgenerator
 
                 if (records[1..].Window(2).Any(window => window[0].Entries?.ToImmutableHashSet().IsSubsetOf(window[^1].Entries.EmptyIfNull()) is false))
                 {
-                    yield return (records[0], records);
+                    yield return (records[0], records[^1]);
                 }
             }
         }

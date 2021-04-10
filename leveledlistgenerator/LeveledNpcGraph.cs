@@ -6,28 +6,30 @@ using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
 
 namespace leveledlistgenerator
 {
-    public class LeveledItemGraph
+    public class LeveledNpcGraph
     {
-        Dictionary<ModKey, List<List<ModKey>>> foundPaths = new(); 
+        Dictionary<ModKey, List<List<ModKey>>> foundPaths = new();
 
         FormKey FormKey { get; }
-        ILeveledItemGetter Base { get; }
+        ILeveledNpcGetter Base { get; }
         ImmutableHashSet<ModKey> ModKeys { get; }
         Dictionary<ModKey, HashSet<ModKey>> Graph { get; }
         ImmutableDictionary<ModKey, IModListing<ISkyrimModGetter>> Mods { get; }
 
-        public LeveledItemGraph(IPatcherState<ISkyrimMod, ISkyrimModGetter> state, FormKey formKey)
+        public LeveledNpcGraph(IPatcherState<ISkyrimMod, ISkyrimModGetter> state, FormKey formKey)
         {
             var linkCache = state.LinkCache;
             var loadOrder = state.LoadOrder.PriorityOrder.OnlyEnabled();
-            var listings = loadOrder.Where(mod => mod.Mod is not null && mod.Mod.LeveledItems.ContainsKey(formKey)).Reverse();
-            
+            var listings = loadOrder.Where(plugin => plugin.Mod is not null && plugin.Mod.LeveledNpcs.ContainsKey(formKey)).Reverse();
+
             FormKey = formKey;
-            Base = formKey.AsLink<ILeveledItemGetter>().ResolveAll(linkCache).Last();
-            ModKeys = listings.Select(mod => mod.ModKey).ToImmutableHashSet();
+            Base = formKey.AsLink<ILeveledNpcGetter>().ResolveAll(linkCache).Last();
+            ModKeys = listings.Select(plugin => plugin.ModKey).ToImmutableHashSet();
             Graph = new() { { ModKey.Null, new() } };
             Mods = listings.ToImmutableDictionary(mod => mod.ModKey);
 
@@ -39,11 +41,17 @@ namespace leveledlistgenerator
                 if (listing.Mod is { } mod)
                 {
                     var masterReferences = mod.ModHeader.MasterReferences;
-                    var masterKeys = masterReferences.Select(_ => _.Master).Where(ModKeys.Contains).DefaultIfEmpty(ModKey.Null);
-
-                    foreach (var key in masterKeys)
+                    if (masterReferences.Count == 0)
                     {
-                        Graph[key].Add(mod.ModKey);
+                        Graph[ModKey.Null].Add(mod.ModKey);
+                    }
+                    else
+                    {
+                        var masterKeys = masterReferences.Select(_ => _.Master).Where(ModKeys.Contains).DefaultIfEmpty(ModKey.Null);
+                        foreach (var key in masterKeys)
+                        {
+                            Graph[key].Add(mod.ModKey);
+                        }
                     }
                 }
             }
@@ -64,7 +72,7 @@ namespace leveledlistgenerator
 
         public List<List<ModKey>> Traverse(ModKey startingKey)
         {
-            if (Graph.ContainsKey(startingKey) is false) 
+            if (Graph.ContainsKey(startingKey) is false)
                 return new();
 
             if (foundPaths.ContainsKey(startingKey))
@@ -78,12 +86,12 @@ namespace leveledlistgenerator
             {
                 foreach (var value in values)
                 {
-                    if (Graph[value].Any() is false) 
+                    if (Graph[value].Any() is false)
                         endPoints.Add(value);
                 }
             }
-            
-            foreach (var endPoint in endPoints) 
+
+            foreach (var endPoint in endPoints)
                 Visit(startingKey, endPoint, path);
 
             foreach (var value in paths)
@@ -93,13 +101,13 @@ namespace leveledlistgenerator
             return paths;
 
             void Visit(ModKey startPoint, ModKey endPoint, IEnumerable<ModKey> path)
-            {            
+            {
                 if (startPoint == endPoint)
-                {             
+                {
                     paths.Add(path.ToList());
                     return;
                 }
-                
+
                 foreach (var node in Graph[startPoint])
                 {
                     Visit(node, endPoint, path.Append(node));
@@ -111,7 +119,7 @@ namespace leveledlistgenerator
         {
             var paths = Traverse();
             var records = paths.Select(path => path.Last()).Distinct()
-                .Select(key => Mods[key].Mod!.LeveledItems[FormKey])
+                .Select(key => Mods[key].Mod!.LeveledNpcs[FormKey])
                 .Select(record => record.EditorID);
 
             return records.Where(id => id is not null && !id.Equals(Base.EditorID, StringComparison.InvariantCulture)).LastOrDefault() ?? Base.EditorID ?? Guid.NewGuid().ToString();
@@ -121,7 +129,7 @@ namespace leveledlistgenerator
         {
             var paths = Traverse();
             var records = paths.Select(path => path.Last()).Distinct()
-                .Select(key => Mods[key].Mod!.LeveledItems[FormKey])
+                .Select(key => Mods[key].Mod!.LeveledNpcs[FormKey])
                 .Select(record => record.ChanceNone);
 
             return records.Where(chanceNone => chanceNone != Base.ChanceNone).DefaultIfEmpty(Base.ChanceNone).Last();
@@ -131,24 +139,24 @@ namespace leveledlistgenerator
         {
             var paths = Traverse();
             var records = paths.Select(path => path.Last()).Distinct()
-                .Select(key => Mods[key].Mod!.LeveledItems[FormKey])
+                .Select(key => Mods[key].Mod!.LeveledNpcs[FormKey])
                 .Select(record => record.Global);
 
             return records.Where(global => global != Base.Global).DefaultIfEmpty(Base.Global).Last().AsNullable();
         }
 
-        public IEnumerable<ILeveledItemEntryGetter> GetEntries()
+        public IEnumerable<ILeveledNpcEntryGetter> GetEntries()
         {
             var paths = Traverse();
             var keys = paths.Select(path => path.Last()).Distinct();
-            var records = keys.Select(key => Mods[key].Mod!.LeveledItems[FormKey]);
+            var records = keys.Select(key => Mods[key].Mod!.LeveledNpcs[FormKey]);
 
             if (records.Count() == 1)
-                return records.First().Entries ?? Array.Empty<ILeveledItemEntryGetter>();
+                return records.Last().Entries ?? Array.Empty<ILeveledNpcEntryGetter>();
 
-            var baseEntries = Base.Entries ?? Array.Empty<ILeveledItemEntryGetter>();
+            var baseEntries = Base.Entries ?? Array.Empty<ILeveledNpcEntryGetter>();
 
-            List<ILeveledItemEntryGetter> itemsAdded = new();
+            List<ILeveledNpcEntryGetter> itemsAdded = new();
 
             var itemIntersection = records.Skip(1).Aggregate(ImmutableList.CreateRange(records.First().Entries.EmptyIfNull()), (list, item) => {
                 return list.IntersectWith(item.Entries.EmptyIfNull()).ToImmutableList();
@@ -168,11 +176,11 @@ namespace leveledlistgenerator
             return itemsAdded.And(itemIntersection);
         }
 
-        public LeveledItem.Flag GetFlags()
+        public LeveledNpc.Flag GetFlags()
         {
             var paths = Traverse();
             var records = paths.Select(path => path.Last()).Distinct()
-                .Select(key => Mods[key].Mod!.LeveledItems[FormKey])
+                .Select(key => Mods[key].Mod!.LeveledNpcs[FormKey])
                 .Select(record => record.Flags);
 
             return records.Where(flag => flag != Base.Flags).DefaultIfEmpty(Base.Flags).Last();
