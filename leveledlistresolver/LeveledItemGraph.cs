@@ -7,65 +7,60 @@ using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 
-namespace leveledlistgenerator
+namespace leveledlistresolver
 {
     public class LeveledItemGraph
     {
-        Dictionary<ModKey, List<List<ModKey>>> foundPaths = new(); 
-
-        FormKey FormKey { get; }
-        ILeveledItemGetter Base { get; }
-        ImmutableHashSet<ModKey> ModKeys { get; }
-        Dictionary<ModKey, HashSet<ModKey>> Graph { get; }
-        ImmutableDictionary<ModKey, ILeveledItemGetter> Records { get; }
-        ImmutableHashSet<ILeveledItemGetter> ExtentRecords { get; }
+        public FormKey FormKey { get; }
+        public ILeveledItemGetter Base { get; }
+        public ImmutableHashSet<ModKey> ModKeys { get; }
+        public ImmutableDictionary<ModKey, HashSet<ModKey>> Graph { get; }
+        public ImmutableDictionary<ModKey, ILeveledItemGetter> Records { get; }
+        public ImmutableHashSet<ILeveledItemGetter> ExtentRecords { get; }
 
         public LeveledItemGraph(IPatcherState<ISkyrimMod, ISkyrimModGetter> state, FormKey formKey)
         {
             var linkCache = state.LinkCache;
             var loadOrder = state.LoadOrder.PriorityOrder.OnlyEnabled();
-            var listings = loadOrder.Where(mod => mod.Mod is not null && mod.Mod.LeveledItems.ContainsKey(formKey)).Reverse();
-            var recordBuilder = ImmutableDictionary.CreateBuilder<ModKey, ILeveledItemGetter>();
+            var listings = loadOrder.Where(plugin => plugin.Mod is not null && plugin.Mod.LeveledItems.ContainsKey(formKey)).Reverse();
             
             FormKey = formKey;
             Base = formKey.AsLink<ILeveledItemGetter>().ResolveAll(linkCache).Last();
-            ModKeys = listings.Select(mod => mod.ModKey).ToImmutableHashSet();
-            Graph = new() { { ModKey.Null, new() } };
+            ModKeys = listings.Select(plugin => plugin.ModKey).ToImmutableHashSet();
+            Graph = new[] { ModKey.Null }.Concat(ModKeys).ToImmutableDictionary(key => key, key => new HashSet<ModKey>());
+            Records = listings.ToImmutableDictionary(plugin => plugin.ModKey, plugin => plugin.Mod!.LeveledItems[FormKey]);
 
             foreach (var listing in listings)
             {
-                if (Graph.ContainsKey(listing.ModKey) is false)
-                    Graph.Add(listing.ModKey, new());
-
                 if (listing.Mod is { } mod)
                 {
                     var masterReferences = mod.ModHeader.MasterReferences;
-                    var masterKeys = masterReferences.Select(_ => _.Master).Where(ModKeys.Contains).DefaultIfEmpty(ModKey.Null);
-                    recordBuilder.Add(mod.ModKey, mod.LeveledItems[FormKey]);
 
-                    foreach (var key in masterKeys)
+                    if (masterReferences.Count == 0)
                     {
-                        Graph[key].Add(mod.ModKey);
+                        Graph[ModKey.Null].Add(mod.ModKey);
+                    }
+                    else
+                    {
+                        var masterKeys = masterReferences.Select(reference => reference.Master).Where(ModKeys.Contains).DefaultIfEmpty(ModKey.Null);
+                        foreach (var key in masterKeys)
+                        {
+                            Graph[key].Add(mod.ModKey);
+                        }
                     }
                 }
             }
-
-            Records = recordBuilder.ToImmutable();
-
-            var extentRecordBuilder = ImmutableHashSet.CreateBuilder<ILeveledItemGetter>();
 
             foreach (var (_, values) in Graph)
             {
                 foreach (var value in values)
                 {
-                    var _ = Graph[value];
-                    if (_.Count == 0)
-                        extentRecordBuilder.Add(Records[value]);
-                    values.ExceptWith(_.Intersect(values));
+                    var keys = Graph[value];
+                    values.ExceptWith(keys.Intersect(values));
                 }
             }
 
-            ExtentRecords = extentRecordBuilder.ToImmutable();
+            ExtentRecords = Graph.Keys.Where(key => Graph[key].Count == 0).Select(key => Records[key]).ToImmutableHashSet();
             Traverse();
         }
 
@@ -76,29 +71,17 @@ namespace leveledlistgenerator
             if (Graph.ContainsKey(startingKey) is false) 
                 return new();
 
-            if (foundPaths.ContainsKey(startingKey))
-                return foundPaths[startingKey];
-
             List<List<ModKey>> paths = new();
             List<ModKey> path = new() { startingKey };
-            HashSet<ModKey> endPoints = new();
-
-            foreach (var (_, values) in Graph)
-            {
-                foreach (var value in values)
-                {
-                    if (Graph[value].Count == 0) 
-                        endPoints.Add(value);
-                }
-            }
+            HashSet<ModKey> extents = Graph.Keys.Where(key => Graph[key].Count == 0).ToHashSet();
             
-            foreach (var endPoint in endPoints) 
-                Visit(startingKey, endPoint, path);
+            foreach (var extent in extents) 
+                Visit(startingKey, extent, path);
 
+            Console.WriteLine($"\n{GetEditorId()}");
             foreach (var value in paths)
                 Console.WriteLine("Found Path: " + string.Join(" -> ", value));
 
-            foundPaths.Add(startingKey, paths);
             return paths;
 
             void Visit(ModKey startPoint, ModKey endPoint, IEnumerable<ModKey> path)

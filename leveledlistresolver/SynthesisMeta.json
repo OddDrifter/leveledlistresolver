@@ -2,7 +2,7 @@
   "Nickname": "leveledlistresolver",
   "Visibility": "Visible",
   "OneLineDescription": "Patcher for resolving levelled list conflicts. WIP",
-  "LongDescription": "",
+  "LongDescription": "Patcher for resolving levelled list conflicts. WIP",
   "PreferredAutoVersioning": "Default",
   "RequiredMods": []
 }

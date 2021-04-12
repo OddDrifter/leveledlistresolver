@@ -6,39 +6,32 @@ using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
-namespace leveledlistgenerator
+namespace leveledlistresolver
 {
     public class LeveledNpcGraph
     {
-        Dictionary<ModKey, List<List<ModKey>>> foundPaths = new();
-
-        FormKey FormKey { get; }
-        ILeveledNpcGetter Base { get; }
-        ImmutableHashSet<ModKey> ModKeys { get; }
-        Dictionary<ModKey, HashSet<ModKey>> Graph { get; }
-        ImmutableDictionary<ModKey, ILeveledNpcGetter> Records { get; }
-        ImmutableHashSet<ILeveledNpcGetter> ExtentRecords { get; }
+        public FormKey FormKey { get; }
+        public ILeveledNpcGetter Base { get; }
+        public ImmutableHashSet<ModKey> ModKeys { get; }
+        public ImmutableDictionary<ModKey, HashSet<ModKey>> Graph { get; }
+        public ImmutableDictionary<ModKey, ILeveledNpcGetter> Records { get; }
+        public ImmutableHashSet<ILeveledNpcGetter> ExtentRecords { get; }
 
         public LeveledNpcGraph(IPatcherState<ISkyrimMod, ISkyrimModGetter> state, FormKey formKey)
         {
             var linkCache = state.LinkCache;
             var loadOrder = state.LoadOrder.PriorityOrder.OnlyEnabled();
             var listings = loadOrder.Where(plugin => plugin.Mod is not null && plugin.Mod.LeveledNpcs.ContainsKey(formKey)).Reverse();
-            var recordBuilder = ImmutableDictionary.CreateBuilder<ModKey, ILeveledNpcGetter>();
 
             FormKey = formKey;
             Base = formKey.AsLink<ILeveledNpcGetter>().ResolveAll(linkCache).Last();
             ModKeys = listings.Select(plugin => plugin.ModKey).ToImmutableHashSet();
-            Graph = new() { { ModKey.Null, new() } };           
+            Graph = new[] { ModKey.Null }.Concat(ModKeys).ToImmutableDictionary(key => key, key => new HashSet<ModKey>());
+            Records = listings.ToImmutableDictionary(plugin => plugin.ModKey, plugin => plugin.Mod!.LeveledNpcs[FormKey]);
 
             foreach (var listing in listings)
             {
-                if (Graph.ContainsKey(listing.ModKey) is false)
-                    Graph.Add(listing.ModKey, new());
-
                 if (listing.Mod is { } mod)
                 {
                     var masterReferences = mod.ModHeader.MasterReferences;
@@ -54,26 +47,19 @@ namespace leveledlistgenerator
                             Graph[key].Add(mod.ModKey);
                         }
                     }
-                    recordBuilder.Add(mod.ModKey, mod.LeveledNpcs[FormKey]);
                 }
             }
-
-            Records = recordBuilder.ToImmutable();
-
-            var extentRecordBuilder = ImmutableHashSet.CreateBuilder<ILeveledNpcGetter>();
 
             foreach (var (_, values) in Graph)
             {
                 foreach (var value in values)
                 {
                     var _ = Graph[value];
-                    if (_.Count == 0)
-                        extentRecordBuilder.Add(Records[value]);
                     values.ExceptWith(_.Intersect(values));
                 }
             }
 
-            ExtentRecords = extentRecordBuilder.ToImmutable();
+            ExtentRecords = Graph.Keys.Where(key => Graph[key].Count == 0).Select(key => Records[key]).ToImmutableHashSet();
             Traverse();
         }
 
@@ -84,29 +70,17 @@ namespace leveledlistgenerator
             if (Graph.ContainsKey(startingKey) is false)
                 return new();
 
-            if (foundPaths.ContainsKey(startingKey))
-                return foundPaths[startingKey];
-
             List<List<ModKey>> paths = new();
             List<ModKey> path = new() { startingKey };
-            HashSet<ModKey> endPoints = new();
+            HashSet<ModKey> extents = Graph.Keys.Where(key => Graph[key].Count == 0).ToHashSet();
 
-            foreach (var (_, values) in Graph)
-            {
-                foreach (var value in values)
-                {
-                    if (Graph[value].Count == 0)
-                        endPoints.Add(value);
-                }
-            }
-
-            foreach (var endPoint in endPoints)
+            foreach (var endPoint in extents)
                 Visit(startingKey, endPoint, path);
 
+            Console.WriteLine($"\n{GetEditorId()}");
             foreach (var value in paths)
                 Console.WriteLine("Found Path: " + string.Join(" -> ", value));
 
-            foundPaths.Add(startingKey, paths);
             return paths;
 
             void Visit(ModKey startPoint, ModKey endPoint, IEnumerable<ModKey> path)
