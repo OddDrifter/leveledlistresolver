@@ -59,7 +59,7 @@ namespace leveledlistresolver
                 }
             }
 
-            ExtentRecords = Graph.Keys.Where(key => Graph[key].Count == 0).Select(key => Records[key]).ToImmutableHashSet();
+            ExtentRecords = Graph.Keys.Where(key => Graph[key].Count == 0 || Graph[key].Contains(Utility.SynthesisKey)).Select(key => Records[key]).ToImmutableHashSet();
             Traverse();
         }
 
