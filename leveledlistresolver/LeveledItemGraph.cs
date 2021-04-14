@@ -18,35 +18,34 @@ namespace leveledlistresolver
         public ImmutableDictionary<ModKey, ILeveledItemGetter> Records { get; }
         public ImmutableHashSet<ILeveledItemGetter> ExtentRecords { get; }
 
+        readonly ILinkCache<ISkyrimMod, ISkyrimModGetter> _linkCache;
+
         public LeveledItemGraph(IPatcherState<ISkyrimMod, ISkyrimModGetter> state, FormKey formKey)
         {
-            var linkCache = state.LinkCache;
-            var loadOrder = state.LoadOrder.PriorityOrder.OnlyEnabled();
-            var listings = loadOrder.Where(plugin => plugin.Mod is not null && plugin.Mod.LeveledItems.ContainsKey(formKey)).Reverse();
+            _linkCache = state.LinkCache;
+            var loadOrder = state.LoadOrder.PriorityOrder.OnlyEnabledAndExisting();
+            var mods = loadOrder.Resolve().Where(mod => mod.LeveledItems.ContainsKey(formKey));
             
             FormKey = formKey;
-            Base = formKey.AsLink<ILeveledItemGetter>().ResolveAll(linkCache).Last();
-            ModKeys = listings.Select(plugin => plugin.ModKey).ToImmutableHashSet();
+            Base = FormKey.AsLink<ILeveledItemGetter>().ResolveAll(_linkCache).Last();
+            ModKeys = mods.Select(mod => mod.ModKey).ToImmutableHashSet();
             Graph = new[] { ModKey.Null }.Concat(ModKeys).ToImmutableDictionary(key => key, key => new HashSet<ModKey>());
-            Records = listings.ToImmutableDictionary(plugin => plugin.ModKey, plugin => plugin.Mod!.LeveledItems[FormKey]);
+            Records = mods.ToImmutableDictionary(mod => mod.ModKey, mod => mod.LeveledItems[FormKey]);
 
-            foreach (var listing in listings)
+            foreach (var mod in mods)
             {
-                if (listing.Mod is { } mod)
-                {
-                    var masterReferences = mod.ModHeader.MasterReferences;
+                var masterReferences = mod.ModHeader.MasterReferences;
 
-                    if (masterReferences.Count == 0)
+                if (masterReferences.Count == 0)
+                {
+                    Graph[ModKey.Null].Add(mod.ModKey);
+                }
+                else
+                {
+                    var masters = masterReferences.Select(reference => reference.Master).Where(ModKeys.Contains).DefaultIfEmpty(ModKey.Null);
+                    foreach (var key in masters)
                     {
-                        Graph[ModKey.Null].Add(mod.ModKey);
-                    }
-                    else
-                    {
-                        var masterKeys = masterReferences.Select(reference => reference.Master).Where(ModKeys.Contains).DefaultIfEmpty(ModKey.Null);
-                        foreach (var key in masterKeys)
-                        {
-                            Graph[key].Add(mod.ModKey);
-                        }
+                        Graph[key].Add(mod.ModKey);
                     }
                 }
             }
@@ -124,7 +123,6 @@ namespace leveledlistresolver
 
             var baseEntries = Base.Entries ?? Array.Empty<ILeveledItemEntryGetter>();
             var entriesList = ExtentRecords.Select(list => list.Entries ?? Array.Empty<ILeveledItemEntryGetter>());
-
             var added = entriesList.Skip(1).Aggregate(ImmutableList.CreateRange(entriesList.First().ExceptWith(baseEntries)), (list, items) => {
                 var toAdd = items.ExceptWith(baseEntries).ExceptWith(list);
                 return list.AddRange(toAdd);
@@ -134,7 +132,7 @@ namespace leveledlistresolver
                 return list.IntersectWith(items).ToImmutableList();
             });
 
-            return added.Concat(intersection);
+            return added.Concat(intersection).Where(entry => entry.IsNullOrEmptySublist(_linkCache) is false);
         }
 
         public LeveledItem.Flag GetFlags()

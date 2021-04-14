@@ -14,6 +14,14 @@ namespace leveledlistresolver
 {
     static class Patcher
     {
+        static readonly LeveledItem.TranslationMask LeveledItemMask = new(defaultOn: true) { 
+            FormVersion = false, VersionControl = false, Version2 = false, Entries = false 
+        };
+
+        static readonly LeveledNpc.TranslationMask LeveledNpcMask = new (defaultOn: true) { 
+            FormVersion = false, VersionControl = false, Version2 = false, Entries = false 
+        };
+
         public static async Task Main(string[] args)
         {
             await SynthesisPipeline.Instance
@@ -27,8 +35,6 @@ namespace leveledlistresolver
             using var loadOrder = state.LoadOrder;
 
             var leveledItems = loadOrder.PriorityOrder.OnlyEnabled().WinningOverrides<ILeveledItemGetter>();
-            var leveledItemsMask = new LeveledItem.TranslationMask(defaultOn: true)
-                { FormVersion = false, VersionControl = false, Version2 = false, Entries = false };
             var leveledItemsToOverride = FindRecordsToOverride(state.LinkCache, leveledItems.ToArray());
 
             Console.WriteLine($"Found {leveledItemsToOverride.Count()} LeveledItem(s) to override");
@@ -46,9 +52,7 @@ namespace leveledlistresolver
                 copy.Global = graph.GetGlobal();
                 copy.Flags = graph.GetFlags();
 
-                var itemsRemoved = copy.Entries.RemoveAll(entry => IsNullOrEmptySublist(entry, state.LinkCache));
-
-                if (itemsRemoved == 0 && copy.Equals(leveledItem, leveledItemsMask) && copy.Entries.IntersectWith(leveledItem.Entries.EmptyIfNull()).CompareCount(copy.Entries) == 0)
+                if (copy.Equals(leveledItem, LeveledItemMask) && copy.Entries.IntersectWith(leveledItem.Entries.EmptyIfNull()).CompareCount(copy.Entries) == 0)
                 {
                     Console.WriteLine($"Skipping [{copy.FormKey}] {copy.EditorID}");
                     continue;
@@ -57,9 +61,7 @@ namespace leveledlistresolver
                 state.PatchMod.LeveledItems.Set(copy);
             }
 
-            var leveledNpcs = loadOrder.PriorityOrder.OnlyEnabled().WinningOverrides<ILeveledNpcGetter>();
-            var leveledNpcsMask = new LeveledNpc.TranslationMask(defaultOn: true)
-                { FormVersion = false, VersionControl = false, Version2 = false, Entries = false };
+            var leveledNpcs = loadOrder.PriorityOrder.OnlyEnabled().WinningOverrides<ILeveledNpcGetter>();            
             var leveledNpcsToOverride = FindRecordsToOverride(state.LinkCache, leveledNpcs.ToArray());
 
             Console.WriteLine($"\nFound {leveledNpcsToOverride.Count()} LeveledNpc(s) to override");
@@ -77,9 +79,7 @@ namespace leveledlistresolver
                 copy.Global = graph.GetGlobal();
                 copy.Flags = graph.GetFlags();
 
-                var itemsRemoved = copy.Entries.RemoveAll(entry => IsNullOrEmptySublist(entry, state.LinkCache));
-
-                if (itemsRemoved == 0 && copy.Equals(leveledNpc, leveledNpcsMask) && copy.Entries.IntersectWith(leveledNpc.Entries.EmptyIfNull()).CompareCount(copy.Entries) == 0)
+                if (copy.Equals(leveledNpc, LeveledNpcMask) && copy.Entries.IntersectWith(leveledNpc.Entries.EmptyIfNull()).CompareCount(copy.Entries) == 0)
                 {
                     Console.WriteLine($"Skipping [{copy.FormKey}] {copy.EditorID}");
                     continue;
@@ -126,28 +126,6 @@ namespace leveledlistresolver
                     yield return records[^1];
                 }
             }
-        }
-
-        private static bool IsNullOrEmptySublist(this ILeveledItemEntryGetter entry, ILinkCache<ISkyrimMod, ISkyrimModGetter> linkCache)
-        {
-            if (entry.Data == null || entry.Data.Reference.IsNull) 
-                return true;
-
-            if (entry.Data.Reference.TryResolve(linkCache, out var itemGetter) && itemGetter is ILeveledItemGetter leveledItem)
-                return leveledItem.Entries is null || leveledItem.Entries.Any() is false;
-
-            return false;
-        }
-
-        private static bool IsNullOrEmptySublist(this ILeveledNpcEntryGetter entry, ILinkCache<ISkyrimMod, ISkyrimModGetter> linkCache)
-        {
-            if (entry.Data == null || entry.Data.Reference.IsNull)
-                return true;
-
-            if (entry.Data.Reference.TryResolve(linkCache, out var npcSpawnGetter) && npcSpawnGetter is ILeveledNpcGetter leveledNpc)
-                return leveledNpc.Entries is null || leveledNpc.Entries.Any() is false;
-
-            return false;
         }
     }
 }

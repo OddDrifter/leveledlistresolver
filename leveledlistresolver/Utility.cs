@@ -1,4 +1,6 @@
-﻿using System;
+﻿using Mutagen.Bethesda;
+using Mutagen.Bethesda.Skyrim;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -43,6 +45,28 @@ namespace leveledlistresolver
                         yield break;
                 }
             }
+        }
+
+        internal static bool IsNullOrEmptySublist(this ILeveledItemEntryGetter entry, ILinkCache<ISkyrimMod, ISkyrimModGetter> linkCache)
+        {
+            if (entry.Data == null || entry.Data.Reference.IsNull)
+                return true;
+
+            if (entry.Data.Reference.TryResolve(linkCache, out var itemGetter) && itemGetter is ILeveledItemGetter leveledItem)
+                return leveledItem.Entries is null || leveledItem.Entries.Count is 0;
+
+            return false;
+        }
+
+        internal static bool IsNullOrEmptySublist(this ILeveledNpcEntryGetter entry, ILinkCache<ISkyrimMod, ISkyrimModGetter> linkCache)
+        {
+            if (entry.Data == null || entry.Data.Reference.IsNull)
+                return true;
+
+            if (entry.Data.Reference.TryResolve(linkCache, out var npcSpawnGetter) && npcSpawnGetter is ILeveledNpcGetter leveledNpc)
+                return leveledNpc.Entries is null || leveledNpc.Entries.Count is 0;
+
+            return false;
         }
     }
 }
