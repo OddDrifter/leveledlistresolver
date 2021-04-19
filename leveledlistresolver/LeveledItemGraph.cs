@@ -143,13 +143,5 @@ namespace leveledlistresolver
             var values = ExtentRecords.Select(record => record.Flags);
             return values.Where(flag => flag != Base.Flags).DefaultIfEmpty(Base.Flags).Last();
         }
-
-        void FixSublists(ILeveledItemGetter leveledItem, uint depth = 0)
-        {
-            //If Entries count is less than 255, return
-            //If greater than 255, turn excess items into sublist
-            //If excess items is still geater than 255, perform a recursive call and increment depth
-            //Mir_{GetEditorId()}Sublist{depth}
-        }
     }
 }
