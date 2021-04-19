@@ -22,9 +22,9 @@ namespace leveledlistresolver
             FormVersion = false, VersionControl = false, Version2 = false, Entries = false 
         };
 
-        public static async Task Main(string[] args)
+        public static async Task<int> Main(string[] args)
         {
-            await SynthesisPipeline.Instance
+            return await SynthesisPipeline.Instance
                 .SetTypicalOpen(GameRelease.SkyrimSE, "Leveled Lists.esp")
                 .AddPatch<ISkyrimMod, ISkyrimModGetter>(Apply)
                 .Run(args);
@@ -35,7 +35,7 @@ namespace leveledlistresolver
             using var loadOrder = state.LoadOrder;
 
             var leveledItems = loadOrder.PriorityOrder.OnlyEnabled().WinningOverrides<ILeveledItemGetter>();
-            var leveledItemsToOverride = FindRecordsToOverride(state.LinkCache, leveledItems.ToArray());
+            var leveledItemsToOverride = FindRecordsToOverride(state.LinkCache, leveledItems);
 
             Console.WriteLine($"Found {leveledItemsToOverride.Count()} LeveledItem(s) to override");
 
@@ -62,7 +62,7 @@ namespace leveledlistresolver
             }
 
             var leveledNpcs = loadOrder.PriorityOrder.OnlyEnabled().WinningOverrides<ILeveledNpcGetter>();            
-            var leveledNpcsToOverride = FindRecordsToOverride(state.LinkCache, leveledNpcs.ToArray());
+            var leveledNpcsToOverride = FindRecordsToOverride(state.LinkCache, leveledNpcs);
 
             Console.WriteLine($"\nFound {leveledNpcsToOverride.Count()} LeveledNpc(s) to override");
 
@@ -94,7 +94,7 @@ namespace leveledlistresolver
             Console.WriteLine("\nReport any issues at https://github.com/OddDrifter/leveledlistgenerator/issues \n");
         }
 
-        private static IEnumerable<ILeveledItemGetter> FindRecordsToOverride(ILinkCache<ISkyrimMod, ISkyrimModGetter> linkCache, params ILeveledItemGetter[] getters)
+        private static IEnumerable<ILeveledItemGetter> FindRecordsToOverride(ILinkCache<ISkyrimMod, ISkyrimModGetter> linkCache, IEnumerable<ILeveledItemGetter> getters)
         {
             foreach (var getter in getters)
             {
@@ -111,7 +111,7 @@ namespace leveledlistresolver
             }
         }
 
-        private static IEnumerable<ILeveledNpcGetter> FindRecordsToOverride(ILinkCache<ISkyrimMod, ISkyrimModGetter> linkCache, params ILeveledNpcGetter[] getters)
+        private static IEnumerable<ILeveledNpcGetter> FindRecordsToOverride(ILinkCache<ISkyrimMod, ISkyrimModGetter> linkCache, IEnumerable<ILeveledNpcGetter> getters)
         {
             foreach (var getter in getters)
             {
