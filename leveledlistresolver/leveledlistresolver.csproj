@@ -19,7 +19,7 @@
 
   <ItemGroup>
     <PackageReference Include="morelinq" Version="3.3.2" />
-    <PackageReference Include="Mutagen.Bethesda" Version="0.28.0" />
-    <PackageReference Include="Mutagen.Bethesda.Synthesis" Version="0.17.5" />
+    <PackageReference Include="Mutagen.Bethesda" Version="0.29.0" />
+    <PackageReference Include="Mutagen.Bethesda.Synthesis" Version="0.18.0" />
   </ItemGroup>
 </Project>
