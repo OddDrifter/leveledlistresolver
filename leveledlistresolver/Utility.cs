@@ -10,8 +10,6 @@ namespace leveledlistresolver
 {
     internal static class Utility
     {
-        internal static readonly ModKey SynthesisKey = ModKey.FromNameAndExtension("Synthesis.esp");
-
         internal static IEnumerable<T> ExceptWith<T>(this IEnumerable<T> lhs, IEnumerable<T> rhs)
         {
             _ = lhs ?? throw new ArgumentNullException(nameof(lhs));
