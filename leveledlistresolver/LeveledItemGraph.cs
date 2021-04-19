@@ -11,7 +11,7 @@ namespace leveledlistresolver
 {
     public class LeveledItemGraph
     {
-        public FormKey FormKey { get; }
+        public FormKey FormKey { get => Base?.FormKey ?? FormKey.Null; }
         public ILeveledItemGetter Base { get; }
         public ImmutableHashSet<ModKey> ModKeys { get; }
         public ImmutableDictionary<ModKey, HashSet<ModKey>> Graph { get; }
@@ -23,34 +23,30 @@ namespace leveledlistresolver
         public LeveledItemGraph(IPatcherState<ISkyrimMod, ISkyrimModGetter> state, FormKey formKey)
         {
             _linkCache = state.LinkCache;
-            var loadOrder = state.LoadOrder.PriorityOrder.OnlyEnabledAndExisting();
-            var mods = loadOrder.Resolve().Where(mod => mod.LeveledItems.ContainsKey(formKey));
-            
-            FormKey = formKey;
-            Base = FormKey.AsLink<ILeveledItemGetter>().ResolveAll(_linkCache).Last();
-            ModKeys = mods.Select(mod => mod.ModKey).ToImmutableHashSet();
-            Graph = new[] { ModKey.Null }.Concat(ModKeys).ToImmutableDictionary(key => key, key => new HashSet<ModKey>());
-            Records = mods.ToImmutableDictionary(mod => mod.ModKey, mod => mod.LeveledItems[FormKey]);
+
+            var contexts = _linkCache.ResolveAllContexts<ILeveledItem, ILeveledItemGetter>(formKey);
+
+            Base = contexts.Last().Record;
+            Records = contexts.ToImmutableDictionary(context => context.ModKey, context => context.Record);
+            ModKeys = Records.Keys.ToImmutableHashSet();
+            Graph = ModKeys.Add(ModKey.Null).ToImmutableDictionary(key => key, key => new HashSet<ModKey>());
+
+            var mods = state.LoadOrder.PriorityOrder.OnlyEnabledAndExisting().Resolve().Where(mod => ModKeys.Contains(mod.ModKey));
 
             foreach (var mod in mods)
             {
-                var masterReferences = mod.ModHeader.MasterReferences;
+                var masters = mod.ModHeader.MasterReferences
+                    .Select(reference => reference.Master)
+                    .Where(ModKeys.Contains)
+                    .DefaultIfEmpty(ModKey.Null);
 
-                if (masterReferences.Count == 0)
+                foreach (var master in masters)
                 {
-                    Graph[ModKey.Null].Add(mod.ModKey);
-                }
-                else
-                {
-                    var masters = masterReferences.Select(reference => reference.Master).Where(ModKeys.Contains).DefaultIfEmpty(ModKey.Null);
-                    foreach (var key in masters)
-                    {
-                        Graph[key].Add(mod.ModKey);
-                    }
+                    Graph[master].Add(mod.ModKey);
                 }
             }
 
-            foreach (var (_, values) in Graph)
+            foreach (var values in Graph.Values)
             {
                 foreach (var value in values)
                 {
@@ -63,19 +59,18 @@ namespace leveledlistresolver
             _= Traverse();
         }
 
-        public List<List<ModKey>> Traverse() => Traverse(ModKey.Null);
+        public List<ImmutableArray<ModKey>> Traverse() => Traverse(ModKey.Null);
 
-        public List<List<ModKey>> Traverse(ModKey startingKey)
+        public List<ImmutableArray<ModKey>> Traverse(ModKey startingKey)
         {
             if (Graph.ContainsKey(startingKey) is false) 
                 return new();
 
-            List<List<ModKey>> paths = new();
-            List<ModKey> path = new() { startingKey };
-            HashSet<ModKey> extents = Graph.Keys.Where(key => Graph[key].Count == 0).ToHashSet();
+            List<ImmutableArray<ModKey>> paths = new();
+            var extents = ModKeys.Where(key => Graph[key].Count is 0);
             
             foreach (var extent in extents) 
-                Visit(startingKey, extent, path);
+                Visit(startingKey, extent, ImmutableArray.Create(startingKey));
 
             Console.WriteLine($"\n{GetEditorId()}");
             foreach (var value in paths)
@@ -83,17 +78,17 @@ namespace leveledlistresolver
 
             return paths;
 
-            void Visit(ModKey startPoint, ModKey endPoint, IEnumerable<ModKey> path)
+            void Visit(ModKey startPoint, ModKey endPoint, ImmutableArray<ModKey> path)
             {            
                 if (startPoint == endPoint)
                 {             
-                    paths.Add(path.ToList());
+                    paths.Add(path);
                     return;
                 }
                 
                 foreach (var node in Graph[startPoint])
                 {
-                    Visit(node, endPoint, path.Append(node));
+                    Visit(node, endPoint, path.Add(node));
                 }
             }
         }
@@ -123,22 +118,38 @@ namespace leveledlistresolver
 
             var baseEntries = Base.Entries ?? Array.Empty<ILeveledItemEntryGetter>();
             var entriesList = ExtentRecords.Select(list => list.Entries ?? Array.Empty<ILeveledItemEntryGetter>());
-            var added = entriesList.Skip(1).Aggregate(ImmutableList.CreateRange(entriesList.First().ExceptWith(baseEntries)), (list, items) => {
-                var toAdd = items.ExceptWith(baseEntries).ExceptWith(list);
-                return list.AddRange(toAdd);
+
+            var added = entriesList.Aggregate(ImmutableList.CreateBuilder<ILeveledItemEntryGetter>(), (builder, items) =>
+            {
+                builder.AddRange(items.ExceptWith(baseEntries).ExceptWith(builder));
+                return builder;
             });
 
-            var intersection = entriesList.Aggregate(ImmutableList.CreateRange(baseEntries), (list, items) => {
+            var intersection = entriesList.Aggregate(ImmutableList.CreateRange(baseEntries), (list, items) =>
+            {
                 return list.IntersectWith(items).ToImmutableList();
             });
 
-            return added.Concat(intersection).Where(entry => entry.IsNullOrEmptySublist(_linkCache) is false);
+            added.AddRange(intersection);
+
+            if (added.Count > 255)
+                Console.WriteLine($"{GetEditorId()} had more than 255 items.");
+
+            return added.ToImmutable().Where(entry => entry.IsNullOrEmptySublist(_linkCache) is false);
         }
 
         public LeveledItem.Flag GetFlags()
         {
             var values = ExtentRecords.Select(record => record.Flags);
             return values.Where(flag => flag != Base.Flags).DefaultIfEmpty(Base.Flags).Last();
+        }
+
+        void FixSublists(ILeveledItemGetter leveledItem, uint depth = 0)
+        {
+            //If Entries count is less than 255, return
+            //If greater than 255, turn excess items into sublist
+            //If excess items is still geater than 255, perform a recursive call and increment depth
+            //Mir_{GetEditorId()}Sublist{depth}
         }
     }
 }
