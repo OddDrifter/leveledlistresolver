@@ -6,6 +6,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
+using static MoreLinq.Extensions.BatchExtension;
 
 namespace leveledlistresolver
 {
@@ -18,10 +19,12 @@ namespace leveledlistresolver
         public ImmutableDictionary<ModKey, ILeveledItemGetter> Records { get; }
         public ImmutableHashSet<ILeveledItemGetter> ExtentRecords { get; }
 
+        readonly ISkyrimMod _patchMod;
         readonly ILinkCache<ISkyrimMod, ISkyrimModGetter> _linkCache;
 
         public LeveledItemGraph(IPatcherState<ISkyrimMod, ISkyrimModGetter> state, FormKey formKey)
         {
+            _patchMod = state.PatchMod;
             _linkCache = state.LinkCache;
 
             var contexts = _linkCache.ResolveAllContexts<ILeveledItem, ILeveledItemGetter>(formKey);
@@ -55,22 +58,24 @@ namespace leveledlistresolver
                 }
             }
 
-            ExtentRecords = Graph.Where(kvp => kvp.Value.Count == 0 || kvp.Value.Contains(state.PatchMod.ModKey)).Select(kvp => Records[kvp.Key]).ToImmutableHashSet();
+            ExtentRecords = Graph.Where(kvp => kvp.Value.Count == 0 || kvp.Value.Contains(_patchMod.ModKey)).Select(kvp => Records[kvp.Key]).ToImmutableHashSet();
             _= Traverse();
         }
 
-        public List<ImmutableArray<ModKey>> Traverse() => Traverse(ModKey.Null);
-
-        public List<ImmutableArray<ModKey>> Traverse(ModKey startingKey)
+        public List<ImmutableList<ModKey>> Traverse(ModKey? startingKey = null)
         {
-            if (Graph.ContainsKey(startingKey) is false) 
+            var startPoint = startingKey ?? ModKey.Null;
+
+            if (Graph.ContainsKey(startPoint) is false) 
                 return new();
 
-            List<ImmutableArray<ModKey>> paths = new();
-            var extents = ModKeys.Where(key => Graph[key].Count is 0);
+            List<ImmutableList<ModKey>> paths = new();
+
+            var path = startPoint.IsNull ? ImmutableList.Create<ModKey>() : ImmutableList.Create(startPoint);
+            var extents = Graph.Where(kvp => kvp.Value.Count is 0);
             
-            foreach (var extent in extents) 
-                Visit(startingKey, extent, ImmutableArray.Create(startingKey));
+            foreach (var (extent, _) in extents) 
+                Visit(startPoint, extent, path);
 
             Console.WriteLine($"\n{GetEditorId()}");
             foreach (var value in paths)
@@ -78,7 +83,7 @@ namespace leveledlistresolver
 
             return paths;
 
-            void Visit(ModKey startPoint, ModKey endPoint, ImmutableArray<ModKey> path)
+            void Visit(ModKey startPoint, ModKey endPoint, ImmutableList<ModKey> path)
             {            
                 if (startPoint == endPoint)
                 {             
@@ -123,19 +128,40 @@ namespace leveledlistresolver
             {
                 builder.AddRange(items.ExceptWith(baseEntries).ExceptWith(builder));
                 return builder;
-            });
+            }).ToImmutable();
 
             var intersection = entriesList.Aggregate(ImmutableList.CreateRange(baseEntries), (list, items) =>
             {
-                return list.IntersectWith(items).ToImmutableList();
+                var toRemove = items.ToList();
+                return list.FindAll(toRemove.Remove);
             });
 
-            added.AddRange(intersection);
+            var items = added.AddRange(intersection).RemoveAll(entry => entry.IsNullOrEmptySublist(_linkCache));
 
-            if (added.Count > 255)
+            if (items.Count > 255)
+            {
                 Console.WriteLine($"{GetEditorId()} had more than 255 items.");
 
-            return added.ToImmutable().Where(entry => entry.IsNullOrEmptySublist(_linkCache) is false);
+                var segments = ((items.Count - 255) / 255) + 1;
+                var extraItems = items.RemoveRange(0, 255 - segments);
+                
+                var entries = extraItems.Batch(255).WithIndex().Select((kvp) => 
+                {
+                    var leveledItem = _patchMod.LeveledItems.AddNew();
+                    leveledItem.EditorID = $"Mir_{GetEditorId()}_Sublist_{kvp.Index + 1}";
+                    leveledItem.Entries = kvp.Item.Select(r => r.DeepCopy()).ToExtendedList();
+                    leveledItem.Flags = GetFlags();
+                    leveledItem.Global = GetGlobal();
+
+                    return new LeveledItemEntry()
+                    {
+                        Data = new() { Reference = leveledItem.AsLink(), Level = 1, Count = 1 }
+                    };
+                });
+
+                return items.GetRange(0, 255 - segments).AddRange(entries);
+            }
+            return items;
         }
 
         public LeveledItem.Flag GetFlags()

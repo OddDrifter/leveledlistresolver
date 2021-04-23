@@ -52,8 +52,8 @@ namespace leveledlistresolver
             if (entry.Data == null || entry.Data.Reference.IsNull)
                 return true;
 
-            if (entry.Data.Reference.TryResolve(linkCache, out var itemGetter) && itemGetter is ILeveledItemGetter leveledItem)
-                return leveledItem.Entries is null || leveledItem.Entries.Count is 0;
+            if (entry.Data.Reference.TryResolve<ILeveledItemGetter>(linkCache, out var leveledItem))
+                return leveledItem.Entries is null or { Count: 0 };
 
             return false;
         }
@@ -63,8 +63,8 @@ namespace leveledlistresolver
             if (entry.Data == null || entry.Data.Reference.IsNull)
                 return true;
 
-            if (entry.Data.Reference.TryResolve(linkCache, out var npcSpawnGetter) && npcSpawnGetter is ILeveledNpcGetter leveledNpc)
-                return leveledNpc.Entries is null || leveledNpc.Entries.Count is 0;
+            if (entry.Data.Reference.TryResolve<ILeveledNpcGetter>(linkCache, out var leveledNpc))
+                return leveledNpc.Entries is null or { Count: 0 };
 
             return false;
         }

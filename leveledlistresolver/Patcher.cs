@@ -44,10 +44,9 @@ namespace leveledlistresolver
                 var graph = new LeveledItemGraph(state, leveledItem.FormKey);
                 var copy = graph.Base.DeepCopy();
 
-                //Todo: Actually handle there being more than 255 items.
                 copy.FormVersion = 44;
                 copy.EditorID = graph.GetEditorId();
-                copy.Entries = graph.GetEntries().Select(record => record.DeepCopy()).Take(255).ToExtendedList();
+                copy.Entries = graph.GetEntries().Select(record => record.DeepCopy()).ToExtendedList();
                 copy.ChanceNone = graph.GetChanceNone();
                 copy.Global = graph.GetGlobal();
                 copy.Flags = graph.GetFlags();
@@ -71,11 +70,10 @@ namespace leveledlistresolver
                 var graph = new LeveledNpcGraph(state, leveledNpc.FormKey);
                 var copy = graph.Base.DeepCopy();
 
-                //Todo: Actually handle there being more than 255 items.
                 copy.FormVersion = 44;
                 copy.EditorID = graph.GetEditorId();
                 copy.ChanceNone = graph.GetChanceNone();
-                copy.Entries = graph.GetEntries().Select(r => r.DeepCopy()).Take(255).ToExtendedList();
+                copy.Entries = graph.GetEntries().Select(r => r.DeepCopy()).ToExtendedList();
                 copy.Global = graph.GetGlobal();
                 copy.Flags = graph.GetFlags();
 
