@@ -32,16 +32,8 @@ namespace leveledlistresolver
             _ = lhs ?? throw new ArgumentNullException(nameof(lhs));
             _ = rhs ?? throw new ArgumentNullException(nameof(rhs));
 
-            if (!lhs.Any())
-                yield break;
-
-            var items = rhs.ToList();
-            foreach (var item in lhs)
-            {
-                if (items.Remove(item))
-                    continue;
-                yield return item;
-            }
+            var toRemove = rhs.ToList();
+            return lhs.Where(item => toRemove.Remove(item) is false);
         }
 
         internal static bool IsNullOrEmptySublist(this ILeveledItemEntryGetter entry, ILinkCache<ISkyrimMod, ISkyrimModGetter> linkCache)
