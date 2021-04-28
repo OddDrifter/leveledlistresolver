@@ -61,20 +61,18 @@ namespace leveledlistresolver
         public static int CountExtents<TMajor, TMajorGetter>(IPatcherState<ISkyrimMod, ISkyrimModGetter> state, FormKey formKey) 
             where TMajor : class, IMajorRecordCommon, TMajorGetter where TMajorGetter : class, IMajorRecordCommonGetter
         {
-            var loadOrder = state.LoadOrder.PriorityOrder.OnlyEnabledAndExisting().Resolve()
-                .ToImmutableDictionary(mod => mod.ModKey);
-
             var modKeys = state.LinkCache.ResolveAllContexts<TMajor, TMajorGetter>(formKey)
                 .Select(context => context.ModKey)
                 .ToImmutableHashSet()
                 .Remove(state.PatchMod.ModKey);
 
-            if (modKeys.Count is 1)
-                return 1;
-
-            var masters = modKeys.Select(key => loadOrder[key])
-                .SelectMany(mod => mod.MasterReferences.Select(reference => reference.Master))
-                .ToImmutableHashSet();
+            var masters = modKeys.Aggregate(ImmutableHashSet.CreateBuilder<ModKey>(), (builder, modKey) =>
+            {
+                if (state.LoadOrder.TryGetIfEnabledAndExists(modKey, out var mod))
+                    foreach (var master in mod.MasterReferences)
+                        builder.Add(master.Master);
+                return builder;
+            }).ToImmutable();
 
             return modKeys.Count(modKey => masters.Contains(modKey) is false);
         }
