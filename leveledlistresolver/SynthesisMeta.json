@@ -1,8 +1,8 @@
 {
   "Nickname": "leveledlistresolver",
   "Visibility": "Visible",
-  "OneLineDescription": "A Patcher for resolving levelled list conflicts.",
-  "LongDescription": "Patcher for resolving levelled list conflicts.",
+  "OneLineDescription": "A Patcher for resolving leveled list conflicts.",
+  "LongDescription": "Patcher for resolving leveled list conflicts.",
   "PreferredAutoVersioning": "Default",
   "RequiredMods": []
 }
