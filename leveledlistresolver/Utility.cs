@@ -58,7 +58,7 @@ namespace leveledlistresolver
             return false;
         }
 
-        public static int CountExtents<TMajor, TMajorGetter>(IPatcherState<ISkyrimMod, ISkyrimModGetter> state, FormKey formKey) 
+        internal static int CountExtents<TMajor, TMajorGetter>(IPatcherState<ISkyrimMod, ISkyrimModGetter> state, FormKey formKey) 
             where TMajor : class, IMajorRecordCommon, TMajorGetter where TMajorGetter : class, IMajorRecordCommonGetter
         {
             var modKeys = state.LinkCache.ResolveAllContexts<TMajor, TMajorGetter>(formKey)

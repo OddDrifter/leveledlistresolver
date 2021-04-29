@@ -14,9 +14,9 @@ namespace leveledlistresolver
     {
         public FormKey FormKey { get => Base?.FormKey ?? FormKey.Null; }
         public ILeveledItemGetter Base { get; }
-        public ImmutableHashSet<ModKey> ModKeys { get; }
+        public IEnumerable<ModKey> ModKeys { get => Records?.Keys ?? Array.Empty<ModKey>(); }
         public ImmutableDictionary<ModKey, HashSet<ModKey>> Graph { get; }
-        public ImmutableDictionary<ModKey, ILeveledItemGetter> Records { get; }
+        public ImmutableSortedDictionary<ModKey, ILeveledItemGetter> Records { get; }
         public ImmutableHashSet<ILeveledItemGetter> ExtentRecords { get; }
 
         readonly ISkyrimMod _patchMod;
@@ -27,59 +27,50 @@ namespace leveledlistresolver
             _patchMod = state.PatchMod;
             _linkCache = state.LinkCache;
 
-            var contexts = _linkCache.ResolveAllContexts<ILeveledItem, ILeveledItemGetter>(formKey);
+            var contexts = _linkCache.ResolveAllContexts<ILeveledItem, ILeveledItemGetter>(formKey).Reverse();
+            var comparer = ModKey.LoadOrderComparer(contexts.Select(context => context.ModKey).ToList());
 
-            Base = contexts.Last().Record;
-            Records = contexts.ToImmutableDictionary(context => context.ModKey, context => context.Record);
-            ModKeys = Records.Keys.ToImmutableHashSet();
-            Graph = ModKeys.Add(ModKey.Null).ToImmutableDictionary(key => key, key => new HashSet<ModKey>());
+            Base = contexts.First().Record;
+            Records = contexts.ToImmutableSortedDictionary(context => context.ModKey, context => context.Record, comparer);
+            Graph = ModKeys.ToImmutableDictionary(key => key, key => new HashSet<ModKey>());
 
-            var mods = state.LoadOrder.PriorityOrder.OnlyEnabledAndExisting().Resolve().Where(mod => ModKeys.Contains(mod.ModKey));
+            var mods = ModKeys.SelectWhere<ModKey, ISkyrimModGetter?>(state.LoadOrder.TryGetIfEnabledAndExists).NotNull();
 
             foreach (var mod in mods)
             {
                 var masters = mod.ModHeader.MasterReferences
                     .Select(reference => reference.Master)
-                    .Where(ModKeys.Contains)
-                    .DefaultIfEmpty(ModKey.Null);
+                    .Intersect(ModKeys);
 
                 foreach (var master in masters)
                 {
-                    Graph[master].Add(mod.ModKey);
+                    if (Graph[master].Overlaps(masters) is false)
+                        Graph[master].Add(mod.ModKey);
                 }
             }
 
-            foreach (var values in Graph.Values)
-            {
-                foreach (var value in values)
-                {
-                    var keys = Graph[value];
-                    values.ExceptWith(keys.Intersect(values));
-                }
-            }
-
-            ExtentRecords = Graph.Where(kvp => kvp.Value.Count == 0 || kvp.Value.Contains(_patchMod.ModKey)).Select(kvp => Records[kvp.Key]).ToImmutableHashSet();
-            _= Traverse();
+            ExtentRecords = Graph.Where(kvp => kvp.Value.Count is 0 || kvp.Value.Contains(_patchMod.ModKey)).Select(kvp => Records[kvp.Key]).ToImmutableHashSet();
+            _ = Traverse();
         }
 
         public List<ImmutableList<ModKey>> Traverse(ModKey? startingKey = null)
         {
-            var startPoint = startingKey ?? ModKey.Null;
+            var startPoint = startingKey ?? FormKey.ModKey;
 
-            if (Graph.ContainsKey(startPoint) is false) 
+            if (Graph.ContainsKey(startPoint) is false)
                 return new();
 
             List<ImmutableList<ModKey>> paths = new();
 
-            var path = startPoint.IsNull ? ImmutableList.Create<ModKey>() : ImmutableList.Create(startPoint);
+            var path = ImmutableList.Create(startPoint);
             var extents = Graph.Where(kvp => kvp.Value.Count is 0);
             
             foreach (var (extent, _) in extents) 
                 Visit(startPoint, extent, path);
 
-            Console.WriteLine($"\n{GetEditorId()}");
-            foreach (var value in paths)
-                Console.WriteLine("Found Path: " + string.Join(" -> ", value));
+            Console.WriteLine($"\n{GetEditorId()} <{FormKey}>");
+            foreach (var (index, value) in paths.WithIndex())
+                Console.WriteLine($"{index + 1}: " + string.Join(" -> ", value));
 
             return paths;
 
@@ -110,16 +101,16 @@ namespace leveledlistresolver
             return values.Where(chanceNone => chanceNone != Base.ChanceNone).DefaultIfEmpty(Base.ChanceNone).Last();
         }
 
-        public IFormLinkNullable<IGlobalGetter> GetGlobal()
+        public IFormLinkGetter<IGlobalGetter> GetGlobal()
         {
             var values = ExtentRecords.Select(record => record.Global);
-            return values.Where(global => global != Base.Global).DefaultIfEmpty(Base.Global).Last().AsNullable();
+            return values.Where(global => global != Base.Global).DefaultIfEmpty(Base.Global).Last();
         }
 
         public IEnumerable<ILeveledItemEntryGetter> GetEntries()
         {
             if (ExtentRecords.Count == 1)
-                return ExtentRecords.First().Entries ?? Array.Empty<ILeveledItemEntryGetter>();
+                return ExtentRecords.Single().Entries ?? Array.Empty<ILeveledItemEntryGetter>();
 
             var baseEntries = Base.Entries ?? Array.Empty<ILeveledItemEntryGetter>();
             var entriesList = ExtentRecords.Select(list => list.Entries ?? Array.Empty<ILeveledItemEntryGetter>());
@@ -151,7 +142,7 @@ namespace leveledlistresolver
                     leveledItem.EditorID = $"Mir_{GetEditorId()}_Sublist_{kvp.Index + 1}";
                     leveledItem.Entries = kvp.Item.Select(r => r.DeepCopy()).ToExtendedList();
                     leveledItem.Flags = GetFlags();
-                    leveledItem.Global = GetGlobal();
+                    leveledItem.Global.SetTo(GetGlobal());
 
                     return new LeveledItemEntry()
                     {

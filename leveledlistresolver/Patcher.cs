@@ -39,17 +39,17 @@ namespace leveledlistresolver
             {
                 var graph = new LeveledItemGraph(state, leveledItem.FormKey);
                 var copy = graph.Base.DeepCopy();
-
+                
                 copy.FormVersion = 44;
                 copy.EditorID = graph.GetEditorId();
                 copy.Entries = graph.GetEntries().Select(record => record.DeepCopy()).ToExtendedList();
                 copy.ChanceNone = graph.GetChanceNone();
-                copy.Global = graph.GetGlobal();
                 copy.Flags = graph.GetFlags();
+                copy.Global.SetTo(graph.GetGlobal());
 
                 if (copy.Equals(leveledItem, LeveledItemMask) && Utility.UnsortedEqual(copy.Entries, leveledItem.Entries ?? Array.Empty<ILeveledItemEntryGetter>()))
                 {
-                    Console.WriteLine($"Skipping [{copy.FormKey}] {copy.EditorID}");
+                    Console.WriteLine($"Skipping {copy.EditorID}");
                     continue;
                 }
 
@@ -70,12 +70,12 @@ namespace leveledlistresolver
                 copy.EditorID = graph.GetEditorId();
                 copy.ChanceNone = graph.GetChanceNone();
                 copy.Entries = graph.GetEntries().Select(r => r.DeepCopy()).ToExtendedList();
-                copy.Global = graph.GetGlobal();
                 copy.Flags = graph.GetFlags();
+                copy.Global.SetTo(graph.GetGlobal());
 
                 if (copy.Equals(leveledNpc, LeveledNpcMask) && Utility.UnsortedEqual(copy.Entries, leveledNpc.Entries ?? Array.Empty<ILeveledNpcEntryGetter>()))
                 {
-                    Console.WriteLine($"Skipping [{copy.FormKey}] {copy.EditorID}");
+                    Console.WriteLine($"Skipping {copy.EditorID}");
                     continue;
                 }
 
