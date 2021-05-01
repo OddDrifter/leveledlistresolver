@@ -3,102 +3,29 @@ using Mutagen.Bethesda.Skyrim;
 using Mutagen.Bethesda.Synthesis;
 using Noggog;
 using System;
-using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using static MoreLinq.Extensions.BatchExtension;
 
 namespace leveledlistresolver
 {
-    public class LeveledNpcGraph
+    public class LeveledNpcGraph : MajorRecordGraphBase<ISkyrimMod, ISkyrimModGetter, ILeveledNpc, ILeveledNpcGetter>
     {
-        public FormKey FormKey { get => Base?.FormKey ?? FormKey.Null; }
-        public ILeveledNpcGetter Base { get; }
-        public IEnumerable<ModKey> ModKeys { get => Records?.Keys ?? Array.Empty<ModKey>(); }
-        public ImmutableDictionary<ModKey, HashSet<ModKey>> Graph { get; }
-        public ImmutableSortedDictionary<ModKey, ILeveledNpcGetter> Records { get; }
-        public ImmutableHashSet<ILeveledNpcGetter> ExtentRecords { get; }
+        public LeveledNpcGraph(IPatcherState<ISkyrimMod, ISkyrimModGetter> state, in FormKey formKey) : base(state, formKey) { }
 
-        readonly ISkyrimMod _patchMod;
-        readonly ILinkCache<ISkyrimMod, ISkyrimModGetter> _linkCache;
-
-        public LeveledNpcGraph(IPatcherState<ISkyrimMod, ISkyrimModGetter> state, FormKey formKey)
+        public IObjectBoundsGetter GetObjectBounds()
         {
-            _patchMod = state.PatchMod;
-            _linkCache = state.LinkCache;
-
-            var contexts = _linkCache.ResolveAllContexts<ILeveledNpc, ILeveledNpcGetter>(formKey).Reverse();
-            var comparer = ModKey.LoadOrderComparer(contexts.Select(context => context.ModKey).ToList());
-
-            Base = contexts.First().Record;
-            Records = contexts.ToImmutableSortedDictionary(context => context.ModKey, context => context.Record, comparer);
-            Graph = ModKeys.ToImmutableDictionary(key => key, key => new HashSet<ModKey>());
-
-            var mods = ModKeys.SelectWhere<ModKey, ISkyrimModGetter?>(state.LoadOrder.TryGetIfEnabledAndExists).NotNull();
-
-            foreach (var mod in mods)
-            {
-                var masters = mod.ModHeader.MasterReferences
-                    .Select(reference => reference.Master)
-                    .Intersect(ModKeys);
-
-                foreach (var master in masters)
-                {
-                    if (Graph[master].Overlaps(masters) is false)
-                        Graph[master].Add(mod.ModKey);
-                }
-            }
-
-            ExtentRecords = Graph.Where(kvp => kvp.Value.Count is 0 || kvp.Value.Contains(_patchMod.ModKey)).Select(kvp => Records[kvp.Key]).ToImmutableHashSet();
-            _ = Traverse();
-        }
-
-        public List<ImmutableList<ModKey>> Traverse(ModKey? startingKey = null)
-        {
-            var startPoint = startingKey ?? FormKey.ModKey;
-
-            if (Graph.ContainsKey(startPoint) is false)
-                return new();
-
-            List<ImmutableList<ModKey>> paths = new();
-
-            var path = ImmutableList.Create(startPoint);
-            var extents = Graph.Where(kvp => kvp.Value.Count is 0);
-
-            foreach (var (extent, _) in extents)
-                Visit(startPoint, extent, path);
-
-            Console.WriteLine($"\n{GetEditorId()} <{FormKey}>");
-            foreach (var (index, value) in paths.WithIndex())
-                Console.WriteLine($"{index + 1}: " + string.Join(" -> ", value));
-
-            return paths;
-
-            void Visit(ModKey startPoint, ModKey endPoint, ImmutableList<ModKey> path)
-            {
-                if (startPoint == endPoint)
-                {
-                    paths.Add(path);
-                    return;
-                }
-
-                foreach (var node in Graph[startPoint])
-                {
-                    Visit(node, endPoint, path.Add(node));
-                }
-            }
-        }
-
-        public string GetEditorId()
-        {
-            var values = ExtentRecords.Select(record => record.EditorID);
-            return values.Where(id => id is not null && !id.Equals(Base.EditorID, StringComparison.InvariantCulture)).LastOrDefault() ?? Base.EditorID ?? Guid.NewGuid().ToString();
+            return ExtentRecords.Where(record => record.ObjectBounds != Base.ObjectBounds).DefaultIfEmpty(Base).Last().ObjectBounds;
         }
 
         public byte GetChanceNone()
         {
-            var values = ExtentRecords.Select(record => record.ChanceNone);
-            return values.Where(chanceNone => chanceNone != Base.ChanceNone).DefaultIfEmpty(Base.ChanceNone).Last();
+            return ExtentRecords.Where(record => record.ChanceNone != Base.ChanceNone).DefaultIfEmpty(Base).Last().ChanceNone;
+        }
+
+        public LeveledNpc.Flag GetFlags()
+        {
+            return ExtentRecords.Where(record => record.Flags != Base.Flags).DefaultIfEmpty(Base).Last().Flags;
         }
 
         public IFormLinkGetter<IGlobalGetter> GetGlobal()
@@ -107,27 +34,27 @@ namespace leveledlistresolver
             return values.Where(global => global != Base.Global).DefaultIfEmpty(Base.Global).Last();
         }
 
-        public IEnumerable<ILeveledNpcEntryGetter> GetEntries()
+        public ImmutableList<ILeveledNpcEntryGetter> GetEntries()
         {
             if (ExtentRecords.Count == 1)
-                return ExtentRecords.Single().Entries ?? Array.Empty<ILeveledNpcEntryGetter>();
+                return (ExtentRecords.Single().Entries ?? Array.Empty<ILeveledNpcEntryGetter>()).ToImmutableList();
 
             var baseEntries = Base.Entries ?? Array.Empty<ILeveledNpcEntryGetter>();
             var entriesList = ExtentRecords.Select(list => list.Entries ?? Array.Empty<ILeveledNpcEntryGetter>());
 
             var added = entriesList.Aggregate(ImmutableList.CreateBuilder<ILeveledNpcEntryGetter>(), (builder, items) => 
             {
-                builder.AddRange(items.ExceptWith(baseEntries).ExceptWith(builder));
+                builder.AddRange(items.Without(baseEntries).Without(builder));
                 return builder;
             }).ToImmutable();
 
-            var intersection = entriesList.Aggregate(ImmutableList.CreateRange(baseEntries), (list, items) =>
+            var intersection = entriesList.Aggregate(ImmutableList.CreateRange(baseEntries), static (list, items) =>
             {
                 var toRemove = items.ToList();
                 return list.FindAll(toRemove.Remove);
             });
 
-            var items = added.AddRange(intersection).RemoveAll(entry => entry.IsNullOrEmptySublist(_linkCache));
+            var items = added.AddRange(intersection).RemoveAll(entry => entry.IsNullOrEmptySublist(linkCache));
 
             if (items.Count > 255)
             {
@@ -138,7 +65,7 @@ namespace leveledlistresolver
 
                 var entries = extraItems.Batch(255).WithIndex().Select((kvp) =>
                 {
-                    var leveledNpc = _patchMod.LeveledNpcs.AddNew();
+                    var leveledNpc = patchMod.LeveledNpcs.AddNew();
                     leveledNpc.EditorID = $"Mir_{GetEditorId()}_Sublist_{kvp.Index + 1}";
                     leveledNpc.Entries = kvp.Item.Select(r => r.DeepCopy()).ToExtendedList();
                     leveledNpc.Flags = GetFlags();
@@ -156,10 +83,23 @@ namespace leveledlistresolver
             return items;
         }
 
-        public LeveledNpc.Flag GetFlags()
+        public IModelGetter? GetModel()
         {
-            var values = ExtentRecords.Select(record => record.Flags);
-            return values.Where(flag => flag != Base.Flags).DefaultIfEmpty(Base.Flags).Last();
+            var values = ExtentRecords.Select(record => record.Model);
+            return values.Where(model => model != Base.Model).DefaultIfEmpty(Base.Model).Last();
+        }
+
+        public override LeveledNpc ToMajorRecord()
+        {
+            var record = Base.DeepCopy();
+            record.FormVersion = gameRelease.GetDefaultFormVersion() ?? Base.FormVersion;
+            record.EditorID = GetEditorId();
+            record.ChanceNone = GetChanceNone();
+            record.Flags = GetFlags();
+            record.Global.SetTo(GetGlobal());
+            record.Entries = GetEntries().ConvertAll(record => record.DeepCopy()).ToExtendedList();
+            record.Model = GetModel()?.DeepCopy();
+            return record;
         }
     }
 }

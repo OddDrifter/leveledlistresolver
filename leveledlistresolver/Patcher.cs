@@ -1,8 +1,8 @@
 ﻿using Mutagen.Bethesda;
 using Mutagen.Bethesda.Skyrim;
 using Mutagen.Bethesda.Synthesis;
-using Noggog;
 using System;
+using System.Collections.Immutable;
 using System.Linq;
 using System.Threading.Tasks;
 
@@ -18,6 +18,10 @@ namespace leveledlistresolver
             FormVersion = false, VersionControl = false, Version2 = false, Entries = false 
         };
 
+        static readonly LeveledSpell.TranslationMask LeveledSpellMask = new(defaultOn: true) {
+            FormVersion = false, VersionControl = false, Version2 = false, Entries = false
+        };
+
         public static async Task<int> Main(string[] args)
         {
             return await SynthesisPipeline.Instance
@@ -26,66 +30,75 @@ namespace leveledlistresolver
                 .Run(args);
         }
 
-        private static void Apply(IPatcherState<ISkyrimMod, ISkyrimModGetter> state)
+        public static void Apply(IPatcherState<ISkyrimMod, ISkyrimModGetter> state)
         {
             using var loadOrder = state.LoadOrder;
 
             var leveledItems = loadOrder.PriorityOrder.OnlyEnabled().WinningOverrides<ILeveledItemGetter>()
-                .Where(form => Utility.CountExtents<ILeveledItem, ILeveledItemGetter>(state, form.FormKey) > 1);
+                .Where(form => Utility.CountExtents<ILeveledItem, ILeveledItemGetter>(state, form.FormKey) > 1)
+                .ToImmutableArray();
 
-            Console.WriteLine($"Found {leveledItems.Count()} LeveledItem(s) to override");
-
-            foreach (var leveledItem in leveledItems)
+            if (leveledItems.IsEmpty is false)
             {
-                var graph = new LeveledItemGraph(state, leveledItem.FormKey);
-                var copy = graph.Base.DeepCopy();
-                
-                copy.FormVersion = 44;
-                copy.EditorID = graph.GetEditorId();
-                copy.Entries = graph.GetEntries().Select(record => record.DeepCopy()).ToExtendedList();
-                copy.ChanceNone = graph.GetChanceNone();
-                copy.Flags = graph.GetFlags();
-                copy.Global.SetTo(graph.GetGlobal());
+                Console.WriteLine($"Found {leveledItems.Length} LeveledItem(s) to override");
 
-                if (copy.Equals(leveledItem, LeveledItemMask) && Utility.UnsortedEqual(copy.Entries, leveledItem.Entries ?? Array.Empty<ILeveledItemEntryGetter>()))
+                foreach (var leveledItem in leveledItems)
                 {
-                    Console.WriteLine($"Skipping {copy.EditorID}");
-                    continue;
-                }
+                    var copy = new LeveledItemGraph(state, leveledItem.FormKey).ToMajorRecord();
 
-                state.PatchMod.LeveledItems.Set(copy);
+                    if (copy.Equals(leveledItem, LeveledItemMask) && Utility.UnsortedEqual(copy.Entries!, leveledItem.Entries ?? Array.Empty<ILeveledItemEntryGetter>()))
+                    {
+                        Console.WriteLine($"Skipping {copy.EditorID}");
+                        continue;
+                    }
+
+                    state.PatchMod.LeveledItems.Set(copy);
+                }
             }
 
             var leveledNpcs = loadOrder.PriorityOrder.OnlyEnabled().WinningOverrides<ILeveledNpcGetter>()
-                .Where(form => Utility.CountExtents<ILeveledNpc, ILeveledNpcGetter>(state, form.FormKey) > 1);
+                .Where(form => Utility.CountExtents<ILeveledNpc, ILeveledNpcGetter>(state, form.FormKey) > 1)
+                .ToImmutableArray();
 
-            Console.WriteLine($"\nFound {leveledNpcs.Count()} LeveledNpc(s) to override");
-
-            foreach (var leveledNpc in leveledNpcs)
+            if (leveledNpcs.IsEmpty is false)
             {
-                var graph = new LeveledNpcGraph(state, leveledNpc.FormKey);
-                var copy = graph.Base.DeepCopy();
+                Console.WriteLine($"{Environment.NewLine}Found {leveledNpcs.Length} LeveledNpc(s) to override");
 
-                copy.FormVersion = 44;
-                copy.EditorID = graph.GetEditorId();
-                copy.ChanceNone = graph.GetChanceNone();
-                copy.Entries = graph.GetEntries().Select(r => r.DeepCopy()).ToExtendedList();
-                copy.Flags = graph.GetFlags();
-                copy.Global.SetTo(graph.GetGlobal());
-
-                if (copy.Equals(leveledNpc, LeveledNpcMask) && Utility.UnsortedEqual(copy.Entries, leveledNpc.Entries ?? Array.Empty<ILeveledNpcEntryGetter>()))
+                foreach (var leveledNpc in leveledNpcs)
                 {
-                    Console.WriteLine($"Skipping {copy.EditorID}");
-                    continue;
-                }
+                    var copy = new LeveledNpcGraph(state, leveledNpc.FormKey).ToMajorRecord();
 
-                state.PatchMod.LeveledNpcs.Set(copy);
+                    if (copy.Equals(leveledNpc, LeveledNpcMask) && Utility.UnsortedEqual(copy.Entries!, leveledNpc.Entries ?? Array.Empty<ILeveledNpcEntryGetter>()))
+                    {
+                        Console.WriteLine($"Skipping {copy.EditorID}");
+                        continue;
+                    }
+
+                    state.PatchMod.LeveledNpcs.Set(copy);
+                }
             }
 
-            /*var leveledSpells = loadOrder.PriorityOrder.OnlyEnabled().WinningOverrides<ILeveledSpellGetter>()
-                .TryFindOverrides<ILeveledSpellGetter, ILeveledSpellEntryGetter>(state.LinkCache);*/
+            var leveledSpells = loadOrder.PriorityOrder.OnlyEnabled().WinningOverrides<ILeveledSpellGetter>()
+                .Where(form => Utility.CountExtents<ILeveledSpell, ILeveledSpellGetter>(state, form.FormKey) > 1)
+                .ToImmutableArray();
 
-            Console.WriteLine("\nReport any issues at https://github.com/OddDrifter/leveledlistgenerator/issues \n");
+            if (leveledSpells.IsEmpty is false)
+            {
+                Console.WriteLine($"{Environment.NewLine}Found {leveledSpells.Length} LeveledSpell(s) to override");
+
+                foreach (var leveledSpell in leveledSpells)
+                {
+                    var copy = new LeveledSpellGraph(state, leveledSpell.FormKey).ToMajorRecord();
+
+                    if (copy.Equals(leveledSpell, LeveledSpellMask) && Utility.UnsortedEqual(copy.Entries!, leveledSpell.Entries ?? Array.Empty<ILeveledSpellEntryGetter>()))
+                    {
+                        Console.WriteLine($"Skipping {copy.EditorID}");
+                        continue;
+                    }
+                }
+            }
+
+            Console.WriteLine($"{Environment.NewLine}Report any issues at https://github.com/OddDrifter/leveledlistgenerator/issues");
         }      
     }
 }
