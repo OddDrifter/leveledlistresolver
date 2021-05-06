@@ -98,7 +98,7 @@ namespace leveledlistresolver
                 }
             }
 
-            Console.WriteLine($"{Environment.NewLine}Report any issues at https://github.com/OddDrifter/leveledlistgenerator/issues");
+            Console.WriteLine($"{Environment.NewLine}Report any issues at https://github.com/OddDrifter/leveledlistresolver/issues");
         }      
     }
 }
