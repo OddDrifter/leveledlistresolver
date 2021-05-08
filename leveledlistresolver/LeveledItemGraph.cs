@@ -15,32 +15,32 @@ namespace leveledlistresolver
 
         public IObjectBoundsGetter GetObjectBounds()
         {
-            return ExtentRecords.Where(record => record.ObjectBounds != Base.ObjectBounds).DefaultIfEmpty(Base).Last().ObjectBounds;
+            return ExtentRecords.LastOrDefault(record => record.ObjectBounds != Base.ObjectBounds)?.ObjectBounds ?? Base.ObjectBounds;
         }
 
         public byte GetChanceNone()
         {
-            return ExtentRecords.Where(record => record.ChanceNone != Base.ChanceNone).DefaultIfEmpty(Base).Last().ChanceNone;
+            return ExtentRecords.LastOrDefault(record => record.ChanceNone != Base.ChanceNone)?.ChanceNone ?? Base.ChanceNone;
         }
 
         public LeveledItem.Flag GetFlags()
         {
-            return ExtentRecords.Where(record => record.Flags != Base.Flags).DefaultIfEmpty(Base).Last().Flags;
+            return ExtentRecords.LastOrDefault(record => record.Flags != Base.Flags)?.Flags ?? Base.Flags;
         }
 
         public IFormLinkGetter<IGlobalGetter> GetGlobal()
         {
-            return ExtentRecords.Where(record => record.Global != Base.Global).DefaultIfEmpty(Base).Last().Global;
+            return ExtentRecords.LastOrDefault(record => record.Global != Base.Global)?.Global ?? Base.Global;
         }
 
         public ImmutableList<ILeveledItemEntryGetter> GetEntries()
         {
-            if (ExtentRecords.Count == 1) 
-                return (ExtentRecords.Single().Entries ?? Array.Empty<ILeveledItemEntryGetter>()).ToImmutableList();
+            if (ExtentRecords.Count is 1)
+                return ExtentRecords.Single().Entries?.ToImmutableList() ?? ImmutableList.Create<ILeveledItemEntryGetter>();
 
-            var baseEntries = Base.Entries ?? Array.Empty<ILeveledItemEntryGetter>();
+            var baseEntries = ExtentBase?.Entries ?? Base.Entries ?? Array.Empty<ILeveledItemEntryGetter>();
             var entriesList = ExtentRecords.Select(list => list.Entries ?? Array.Empty<ILeveledItemEntryGetter>());
-
+           
             var added = entriesList.Aggregate(ImmutableList.CreateBuilder<ILeveledItemEntryGetter>(), (builder, items) =>
             {
                 builder.AddRange(items.Without(baseEntries).Without(builder));
@@ -57,7 +57,7 @@ namespace leveledlistresolver
 
             if (items.Count > 255)
             {
-                Console.WriteLine($"{GetEditorId()} had more than 255 items.");
+                Console.WriteLine($"{GetEditorID()} had more than 255 items.");
 
                 var segments = ((items.Count - 255) / 255) + 1;
                 var extraItems = items.RemoveRange(0, 255 - segments);
@@ -65,7 +65,7 @@ namespace leveledlistresolver
                 var entries = extraItems.Batch(255).WithIndex().Select((kvp) => 
                 {
                     var leveledItem = patchMod.LeveledItems.AddNew();
-                    leveledItem.EditorID = $"Mir_{GetEditorId()}_Sublist_{kvp.Index + 1}";
+                    leveledItem.EditorID = $"Mir_{GetEditorID()}_Sublist_{kvp.Index + 1}";
                     leveledItem.Entries = kvp.Item.Select(r => r.DeepCopy()).ToExtendedList();
                     leveledItem.Flags = GetFlags();
                     leveledItem.Global.SetTo(GetGlobal());
@@ -85,8 +85,8 @@ namespace leveledlistresolver
         public override LeveledItem ToMajorRecord()
         {
             var record = Base.DeepCopy();
-            record.FormVersion = gameRelease.GetDefaultFormVersion() ?? Base.FormVersion;
-            record.EditorID = GetEditorId();
+            record.FormVersion = GetFormVersion();
+            record.EditorID = GetEditorID();
             record.ChanceNone = GetChanceNone();
             record.Flags = GetFlags();
             record.Global.SetTo(GetGlobal());

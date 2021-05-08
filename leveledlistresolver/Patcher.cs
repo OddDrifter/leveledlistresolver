@@ -33,8 +33,9 @@ namespace leveledlistresolver
         public static void Apply(IPatcherState<ISkyrimMod, ISkyrimModGetter> state)
         {
             using var loadOrder = state.LoadOrder;
+            var enabledAndExisting = loadOrder.PriorityOrder.OnlyEnabledAndExisting().ToImmutableArray();
 
-            var leveledItems = loadOrder.PriorityOrder.OnlyEnabled().WinningOverrides<ILeveledItemGetter>()
+            var leveledItems = enabledAndExisting.WinningOverrides<ILeveledItemGetter>()
                 .Where(form => Utility.CountExtents<ILeveledItem, ILeveledItemGetter>(state, form.FormKey) > 1)
                 .ToImmutableArray();
 
@@ -56,7 +57,7 @@ namespace leveledlistresolver
                 }
             }
 
-            var leveledNpcs = loadOrder.PriorityOrder.OnlyEnabled().WinningOverrides<ILeveledNpcGetter>()
+            var leveledNpcs = enabledAndExisting.WinningOverrides<ILeveledNpcGetter>()
                 .Where(form => Utility.CountExtents<ILeveledNpc, ILeveledNpcGetter>(state, form.FormKey) > 1)
                 .ToImmutableArray();
 
@@ -78,7 +79,7 @@ namespace leveledlistresolver
                 }
             }
 
-            var leveledSpells = loadOrder.PriorityOrder.OnlyEnabled().WinningOverrides<ILeveledSpellGetter>()
+            var leveledSpells = enabledAndExisting.WinningOverrides<ILeveledSpellGetter>()
                 .Where(form => Utility.CountExtents<ILeveledSpell, ILeveledSpellGetter>(state, form.FormKey) > 1)
                 .ToImmutableArray();
 
