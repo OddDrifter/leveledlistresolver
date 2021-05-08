@@ -1,6 +1,7 @@
 ﻿using Mutagen.Bethesda;
 using Mutagen.Bethesda.Skyrim;
 using Mutagen.Bethesda.Synthesis;
+using Noggog;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -95,13 +96,13 @@ namespace leveledlistresolver
                 .ToImmutableHashSet()
                 .Remove(state.PatchMod.ModKey);
 
-            if (modKeys.Count is <= 1)
-                return modKeys.Count;
+            if (modKeys.Count is <= 2)
+                return 1;
 
             var masters = modKeys
                 .SelectMany(modKey => state.LoadOrder.TryGetIfEnabledAndExists(modKey, out var mod) ? mod.MasterReferences : Array.Empty<IMasterReferenceGetter>())
                 .Select(reference => reference.Master)
-                .ToImmutableHashSet();              
+                .ToImmutableHashSet();
 
             return modKeys.Except(masters).Count;
         }
