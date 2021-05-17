@@ -6,7 +6,6 @@ using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
-using static Noggog.HashSetExt;
 
 namespace leveledlistresolver
 {
@@ -21,7 +20,7 @@ namespace leveledlistresolver
         protected readonly ILinkCache<TMod, TModGetter> linkCache;
 
         public TMajorGetter Base { get; }
-        public TMajorGetter? ExtentBase { get; }
+        public TMajorGetter ExtentBase { get; }
         public FormKey FormKey { get => Base?.FormKey ?? FormKey.Null; }
         public ImmutableDictionary<ModKey, HashSet<ModKey>> Adjacents { get; }
         public ImmutableHashSet<TMajorGetter> ExtentRecords { get; }
@@ -32,12 +31,14 @@ namespace leveledlistresolver
             gameRelease = state.GameRelease;
             linkCache = state.LinkCache;
 
-            var contexts = linkCache.ResolveAllContexts<TMajor, TMajorGetter>(formKey).Reverse()
-                .ToDictionary(ctx => ctx.ModKey, ctx => ctx.Record);
-            
-            Base = contexts.First().Value;
+            var contexts = linkCache.ResolveAllContexts<TMajor, TMajorGetter>(formKey).Reverse();
 
-            var modKeys = contexts.Keys;
+            var comparer = ModKey.LoadOrderComparer(contexts.Select(ctx => ctx.ModKey).ToImmutableArray());
+            var contextDictionary = contexts.ToImmutableSortedDictionary(ctx => ctx.ModKey, ctx => ctx.Record, comparer);
+            
+            Base = contextDictionary[formKey.ModKey];
+
+            var modKeys = contextDictionary.Keys;
             var mods = modKeys.SelectWhere<ModKey, TModGetter?>(state.LoadOrder.TryGetIfEnabledAndExists).NotNull()
                 .ToDictionary(mod => mod.ModKey, mod => mod.MasterReferences.Select(refr => refr.Master).Intersect(modKeys).ToHashSet());
 
@@ -45,7 +46,7 @@ namespace leveledlistresolver
 
             foreach (var (key, masters) in mods)
             {
-                masters.Add(masters.SelectMany(master => mods[master]).ToHashSet());
+                masters.UnionWith(masters.SelectMany(master => mods[master]).ToHashSet());
 
                 foreach (var master in masters)
                 {
@@ -58,18 +59,13 @@ namespace leveledlistresolver
 
             Adjacents = adjancentBuilder.ToImmutable();
 
-            var comparer = ModKey.LoadOrderComparer(modKeys.ToImmutableArray());
-            var extents = Adjacents.Where(kvp => kvp.Value is { Count: 0 } || kvp.Value.Contains(patchMod.ModKey))
-                .Select(kvp => kvp.Key);
+            var extents = Adjacents.Where(kvp => kvp.Value is { Count: 0 } || kvp.Value.Contains(patchMod.ModKey));
 
-            ExtentRecords = extents.Select(key => contexts[key]).ToImmutableHashSet();
-            
-            var extentBase = extents.Aggregate(modKeys.ToImmutableHashSet(), (keys, mod) => {
-                return keys.Intersect(mods[mod]);
-            }).OrderBy(ex => ex, comparer).Last();
-
-            if (extentBase != FormKey.ModKey)
-                ExtentBase = contexts[extentBase];
+            ExtentRecords = extents.Select(kvp => contextDictionary[kvp.Key]).ToImmutableHashSet();
+            ExtentBase = extents.Aggregate(modKeys, (keys, kvp) => keys.Intersect(mods[kvp.Key])).OrderBy(key => key, comparer).Last() switch { 
+                var master when master != FormKey.ModKey => contextDictionary[master],
+                _ => Base
+            };
             
             Console.WriteLine(Environment.NewLine + this);
         }

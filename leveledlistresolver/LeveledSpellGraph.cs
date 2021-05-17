@@ -33,8 +33,8 @@ namespace leveledlistresolver
             if (ExtentRecords.Count is 1)
                 return ExtentRecords.Single().Entries?.ToImmutableList() ?? ImmutableList.Create<ILeveledSpellEntryGetter>();
 
-            var baseEntries = ExtentBase?.Entries ?? Base.Entries ?? Array.Empty<ILeveledSpellEntryGetter>();
-            var entriesList = ExtentRecords.Select(list => list.Entries ?? Array.Empty<ILeveledSpellEntryGetter>());
+            var baseEntries = ExtentBase.Entries ?? Array.Empty<ILeveledSpellEntryGetter>();
+            var entriesList = ExtentRecords.Select(list => list.Entries?.ToList() ?? new());
 
             var added = entriesList.Aggregate(ImmutableList.CreateBuilder<ILeveledSpellEntryGetter>(), (builder, items) =>
             {
@@ -44,7 +44,7 @@ namespace leveledlistresolver
 
             var intersection = entriesList.Aggregate(ImmutableList.CreateRange(baseEntries), static (list, items) =>
             {
-                var toRemove = items.ToList();
+                var toRemove = items;
                 return list.FindAll(toRemove.Remove);
             });
 
