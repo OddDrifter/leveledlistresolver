@@ -31,9 +31,11 @@ namespace leveledlistresolver
             gameRelease = state.GameRelease;
             linkCache = state.LinkCache;
 
-            var contexts = linkCache.ResolveAllContexts<TMajor, TMajorGetter>(formKey).Reverse();
+            var contexts = linkCache.ResolveAllContexts<TMajor, TMajorGetter>(formKey).Reverse().ToImmutableList();
 
-            var comparer = ModKey.LoadOrderComparer(contexts.Select(ctx => ctx.ModKey).ToImmutableArray());
+            Console.Write($"{Environment.NewLine}{contexts.ItemRef(0).Record.EditorID} [{formKey}]");
+
+            var comparer = ModKey.LoadOrderComparer(contexts.ConvertAll(static ctx => ctx.ModKey));
             var contextDictionary = contexts.ToImmutableSortedDictionary(ctx => ctx.ModKey, ctx => ctx.Record, comparer);
             
             Base = contextDictionary[formKey.ModKey];
@@ -60,14 +62,13 @@ namespace leveledlistresolver
             Adjacents = adjancentBuilder.ToImmutable();
 
             var extents = Adjacents.Where(kvp => kvp.Value is { Count: 0 } || kvp.Value.Contains(patchMod.ModKey));
-
             ExtentRecords = extents.Select(kvp => contextDictionary[kvp.Key]).ToImmutableHashSet();
-            ExtentBase = extents.Aggregate(modKeys, (keys, kvp) => keys.Intersect(mods[kvp.Key])).OrderBy(key => key, comparer).Last() switch { 
-                var master when master != FormKey.ModKey => contextDictionary[master],
-                _ => Base
-            };
             
-            Console.WriteLine(Environment.NewLine + this);
+            Console.WriteLine(ToString(formKey.ModKey));
+
+            var extentMaster = extents.Aggregate(modKeys, (keys, kvp) => keys.Intersect(mods[kvp.Key]))
+                .OrderBy(key => key, comparer).DefaultIfEmpty(formKey.ModKey).Last();
+            ExtentBase = contextDictionary[extentMaster];
         }
 
         public ushort GetFormVersion()
@@ -84,7 +85,7 @@ namespace leveledlistresolver
 
         public override string ToString()
         {
-            return ToString(FormKey.ModKey);
+            return $"{GetEditorID()} [{FormKey}]" + ToString(FormKey.ModKey);
         }
 
         public string ToString(ModKey startPoint) 
@@ -92,7 +93,7 @@ namespace leveledlistresolver
             if (Adjacents.ContainsKey(startPoint) is false)
                 return string.Empty;
 
-            StringBuilder builder = new($"{GetEditorID()} [{FormKey}]");
+            StringBuilder builder = new();
 
             var extents = Adjacents.Where(kvp => kvp.Value.Count is 0);
 
