@@ -36,7 +36,7 @@ namespace leveledlistresolver
         public ImmutableList<ILeveledNpcEntryGetter> GetEntries()
         {
             if (ExtentRecords.Count is 1)
-                return ExtentRecords.Single().Entries?.ToImmutableList() ?? ImmutableList.Create<ILeveledNpcEntryGetter>();
+                return ExtentRecords.Single().Entries?.ToImmutableList() ?? ImmutableList<ILeveledNpcEntryGetter>.Empty;
 
             var baseEntries = ExtentBase.Entries ?? Array.Empty<ILeveledNpcEntryGetter>();
             var entriesList = ExtentRecords.Select(list => list.Entries?.ToList() ?? new());
@@ -62,11 +62,11 @@ namespace leveledlistresolver
                 var segments = ((items.Count - 255) / 255) + 1;
                 var extraItems = items.RemoveRange(0, 255 - segments);
 
-                var entries = extraItems.Batch(255).WithIndex().Select((kvp) =>
+                var entries = extraItems.Batch(255).Select((items, index) =>
                 {
                     var leveledNpc = patchMod.LeveledNpcs.AddNew();
-                    leveledNpc.EditorID = $"Mir_{GetEditorID()}_Sublist_{kvp.Index + 1}";
-                    leveledNpc.Entries = kvp.Item.Select(r => r.DeepCopy()).ToExtendedList();
+                    leveledNpc.EditorID = $"Mir_{GetEditorID()}_Sublist_{index + 1}";
+                    leveledNpc.Entries = items.Select(r => r.DeepCopy()).ToExtendedList();
                     leveledNpc.Flags = GetFlags();
                     leveledNpc.Global.SetTo(GetGlobal());
 

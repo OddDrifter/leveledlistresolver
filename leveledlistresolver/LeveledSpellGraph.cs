@@ -31,7 +31,7 @@ namespace leveledlistresolver
         public ImmutableList<ILeveledSpellEntryGetter> GetEntries()
         {
             if (ExtentRecords.Count is 1)
-                return ExtentRecords.Single().Entries?.ToImmutableList() ?? ImmutableList.Create<ILeveledSpellEntryGetter>();
+                return ExtentRecords.Single().Entries?.ToImmutableList() ?? ImmutableList<ILeveledSpellEntryGetter>.Empty;
 
             var baseEntries = ExtentBase.Entries ?? Array.Empty<ILeveledSpellEntryGetter>();
             var entriesList = ExtentRecords.Select(list => list.Entries?.ToList() ?? new());
@@ -57,12 +57,12 @@ namespace leveledlistresolver
                 var segments = ((items.Count - 255) / 255) + 1;
                 var extraItems = items.RemoveRange(0, 255 - segments);
 
-                var entries = extraItems.Batch(255).WithIndex().Select((kvp) =>
+                var entries = extraItems.Batch(255).Select((items, index) =>
                 {
                     var leveledSpell = patchMod.LeveledSpells.AddNew();
-                    leveledSpell.EditorID = $"Mir_{GetEditorID()}_Sublist_{kvp.Index + 1}";
+                    leveledSpell.EditorID = $"Mir_{GetEditorID()}_Sublist_{index + 1}";
                     leveledSpell.Flags = GetFlags();
-                    leveledSpell.Entries = kvp.Item.Select(r => r.DeepCopy()).ToExtendedList();
+                    leveledSpell.Entries = items.Select(r => r.DeepCopy()).ToExtendedList();
 
                     return new LeveledSpellEntry()
                     {
