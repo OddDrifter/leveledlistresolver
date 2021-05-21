@@ -57,7 +57,7 @@ namespace leveledlistresolver
 
         internal static bool IsNullOrEmptySublist(this ILeveledItemEntryGetter entry, ILinkCache<ISkyrimMod, ISkyrimModGetter> linkCache)
         {
-            if (entry.Data == null || entry.Data.Reference.IsNull)
+            if (entry.Data is null || entry.Data.Reference.IsNull)
                 return true;
 
             if (entry.Data.Reference.TryResolve<ILeveledItemGetter>(linkCache, out var leveledItem))
@@ -68,7 +68,7 @@ namespace leveledlistresolver
 
         internal static bool IsNullOrEmptySublist(this ILeveledNpcEntryGetter entry, ILinkCache<ISkyrimMod, ISkyrimModGetter> linkCache)
         {
-            if (entry.Data == null || entry.Data.Reference.IsNull)
+            if (entry.Data is null || entry.Data.Reference.IsNull)
                 return true;
 
             if (entry.Data.Reference.TryResolve<ILeveledNpcGetter>(linkCache, out var leveledNpc))
@@ -79,7 +79,7 @@ namespace leveledlistresolver
 
         internal static bool IsNullOrEmptySublist(this ILeveledSpellEntryGetter entry, ILinkCache<ISkyrimMod, ISkyrimModGetter> linkCache)
         {
-            if (entry.Data == null || entry.Data.Reference.IsNull)
+            if (entry.Data is null || entry.Data.Reference.IsNull)
                 return true;
 
             if (entry.Data.Reference.TryResolve<ILeveledSpellGetter>(linkCache, out var leveledSpell))

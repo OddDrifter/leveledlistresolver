@@ -32,7 +32,7 @@ namespace leveledlistresolver
 
         public static void Apply(IPatcherState<ISkyrimMod, ISkyrimModGetter> state)
         {
-            Console.WriteLine("Report any issues at https://github.com/OddDrifter/leveledlistresolver/issues");
+            Console.WriteLine("Report issues at https://github.com/OddDrifter/leveledlistresolver/issues");
 
             using var loadOrder = state.LoadOrder;
             var enabledAndExisting = loadOrder.PriorityOrder.OnlyEnabledAndExisting().ToImmutableArray();

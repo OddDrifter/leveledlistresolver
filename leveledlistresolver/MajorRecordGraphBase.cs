@@ -31,44 +31,41 @@ namespace leveledlistresolver
             gameRelease = state.GameRelease;
             linkCache = state.LinkCache;
 
-            var contexts = linkCache.ResolveAllContexts<TMajor, TMajorGetter>(formKey).Reverse().ToImmutableList();
+            var modContexts = linkCache.ResolveAllContexts<TMajor, TMajorGetter>(formKey).ToImmutableList().Reverse();
+            var modKeys = modContexts.ConvertAll(static ctx => ctx.ModKey);
 
-            Console.Write($"{Environment.NewLine}{contexts.ItemRef(0).Record.EditorID} [{formKey}]");
+            var comparer = ModKey.LoadOrderComparer(modKeys);
 
-            var comparer = ModKey.LoadOrderComparer(contexts.ConvertAll(static ctx => ctx.ModKey));
-            var contextDictionary = contexts.ToImmutableSortedDictionary(ctx => ctx.ModKey, ctx => ctx.Record, comparer);
+            var contextDictionary = modContexts.ToImmutableSortedDictionary(ctx => ctx.ModKey, ctx => ctx.Record, comparer);
+            var mastersDictionary = modKeys.SelectWhere<ModKey, TModGetter?>(state.LoadOrder.TryGetIfEnabledAndExists).NotNull()
+                .ToDictionary(mod => mod.ModKey, mod => mod.MasterReferences.Select(refr => refr.Master).Intersect(modKeys).ToHashSet());
             
             Base = contextDictionary[formKey.ModKey];
 
-            var modKeys = contextDictionary.Keys;
-            var mods = modKeys.SelectWhere<ModKey, TModGetter?>(state.LoadOrder.TryGetIfEnabledAndExists).NotNull()
-                .ToDictionary(mod => mod.ModKey, mod => mod.MasterReferences.Select(refr => refr.Master).Intersect(modKeys).ToHashSet());
+            var adjancentBuilder = modKeys.ToImmutableDictionary(key => key, key => new HashSet<ModKey>()).ToBuilder();
 
-            var adjancentBuilder = ImmutableDictionary.CreateBuilder<ModKey, HashSet<ModKey>>();
-
-            foreach (var (key, masters) in mods)
+            foreach (var (modKey, masters) in mastersDictionary)
             {
-                masters.UnionWith(masters.SelectMany(master => mods[master]).ToHashSet());
+                masters.UnionWith(masters.SelectMany(master => mastersDictionary[master]).ToHashSet());
 
                 foreach (var master in masters)
                 {
                     if (adjancentBuilder[master].Overlaps(masters) is false)
-                        adjancentBuilder[master].Add(key);
+                    {
+                        adjancentBuilder[master].Add(modKey);
+                    }
                 }
-
-                adjancentBuilder.Add(key, new());
             }
 
             Adjacents = adjancentBuilder.ToImmutable();
 
-            var extents = Adjacents.Where(kvp => kvp.Value is { Count: 0 } || kvp.Value.Contains(patchMod.ModKey));
-            ExtentRecords = extents.Select(kvp => contextDictionary[kvp.Key]).ToImmutableHashSet();
-            
-            Console.WriteLine(ToString(formKey.ModKey));
+            var extentMods = Adjacents.Where(kvp => kvp.Value is { Count: 0 } || kvp.Value.Contains(patchMod.ModKey)).Select(kvp => kvp.Key);
+            var extentMasters = extentMods.Aggregate(modKeys, (list, modKey) => list.FindAll(key => mastersDictionary[modKey].Contains(key))).Sort(comparer);
 
-            var extentMaster = extents.Aggregate(modKeys, (keys, kvp) => keys.Intersect(mods[kvp.Key]))
-                .OrderBy(key => key, comparer).DefaultIfEmpty(formKey.ModKey).Last();
-            ExtentBase = contextDictionary[extentMaster];
+            ExtentBase = extentMasters.IsEmpty ? Base : contextDictionary[extentMasters[^1]];
+            ExtentRecords = extentMods.Select(modKey => contextDictionary[modKey]).ToImmutableHashSet();
+            
+            Console.WriteLine(Environment.NewLine + this);
         }
 
         public ushort GetFormVersion()
@@ -76,31 +73,54 @@ namespace leveledlistresolver
             return gameRelease.GetDefaultFormVersion() ?? Base.FormVersion ?? throw RecordException.Enrich(new NullReferenceException("FormVersion was Null"), Base);
         }
 
+        public uint GetVersionControl()
+        {
+            var formVersion = GetFormVersion();
+
+            return formVersion switch
+            {
+                43 => _le(),
+                44 => _sse(),
+                _ => throw new NotImplementedException()
+            };
+
+            static uint _le()
+            {
+                return 0;
+            }
+
+            static uint _sse() {
+                DateTime date = DateTime.Now;
+                return Convert.ToUInt32(((date.Year - 2000) << 9) + (date.Month << 5) + date.Day);
+            }          
+        }
+
         public string GetEditorID()
         {
             return ExtentRecords.LastOrDefault(record => 
-                !record.EditorID?.Equals(Base.EditorID, StringComparison.InvariantCulture) ?? false
+                (record.EditorID?.Equals(Base.EditorID, StringComparison.InvariantCulture) ?? false) is false
             )?.EditorID ?? Base.EditorID ?? Guid.NewGuid().ToString();
         }
 
         public override string ToString()
         {
-            return $"{GetEditorID()} [{FormKey}]" + ToString(FormKey.ModKey);
+            return ToString(FormKey.ModKey);
         }
 
-        public string ToString(ModKey startPoint) 
+        public string ToString(in ModKey startPoint) 
         {
             if (Adjacents.ContainsKey(startPoint) is false)
                 return string.Empty;
 
-            StringBuilder builder = new();
+            StringBuilder builder = new($"{GetEditorID()} [{FormKey}]");
 
+            var start = ImmutableList.Create(startPoint);
             var extents = Adjacents.Where(kvp => kvp.Value.Count is 0);
 
             foreach (var (extent, _) in extents)
-                Visit(startPoint, extent, ImmutableList.Create(startPoint));
+                Visit(startPoint, extent, start);
 
-            void Visit(ModKey start, ModKey end, ImmutableList<ModKey> visited)
+            void Visit(in ModKey start, in ModKey end, ImmutableList<ModKey> visited)
             {
                 if (start == end)
                 {
