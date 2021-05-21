@@ -3,9 +3,9 @@ using Mutagen.Bethesda.Skyrim;
 using Mutagen.Bethesda.Synthesis;
 using Noggog;
 using System;
-using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
+using static MoreLinq.Extensions.BatchExtension;
 
 namespace leveledlistresolver
 {
@@ -33,7 +33,7 @@ namespace leveledlistresolver
             return ExtentRecords.LastOrDefault(record => record.Global != Base.Global)?.Global ?? Base.Global;
         }
 
-        public IEnumerable<LeveledItemEntry> GetEntries()
+        /*public IEnumerable<LeveledItemEntry> GetEntries()
         {
             if (ExtentRecords.Count is 1)
             {
@@ -110,9 +110,9 @@ namespace leveledlistresolver
                 leveledItem.Global.SetTo(GetGlobal());
                 return new() { Data = new() { Reference = leveledItem.AsLink(), Level = 1, Count = 1 } };
             }
-        }
+        }*/
 
-        /*public ImmutableList<ILeveledItemEntryGetter> GetEntries()
+        public ImmutableList<ILeveledItemEntryGetter> GetEntries()
         {
             if (ExtentRecords.Count is 1)
                 return ExtentRecords.Single().Entries?.ToImmutableList() ?? ImmutableList<ILeveledItemEntryGetter>.Empty;
@@ -159,7 +159,7 @@ namespace leveledlistresolver
             }
 
             return items;
-        }*/
+        }
 
         public override LeveledItem ToMajorRecord()
         {
@@ -169,8 +169,8 @@ namespace leveledlistresolver
             record.ChanceNone = GetChanceNone();
             record.Flags = GetFlags();
             record.Global.SetTo(GetGlobal());
-            record.Entries = new(GetEntries());
-            //record.Entries = GetEntries().ConvertAll(record => record.DeepCopy()).ToExtendedList();
+            //record.Entries = new(GetEntries());
+            record.Entries = GetEntries().ConvertAll(record => record.DeepCopy()).ToExtendedList();
             return record;
         }
     }

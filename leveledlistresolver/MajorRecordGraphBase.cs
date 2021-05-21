@@ -21,9 +21,11 @@ namespace leveledlistresolver
 
         public TMajorGetter Base { get; }
         public TMajorGetter ExtentBase { get; }
+        public ModKey ModKey { get; }
         public FormKey FormKey { get => Base?.FormKey ?? FormKey.Null; }
         public ImmutableDictionary<ModKey, HashSet<ModKey>> Adjacents { get; }
         public ImmutableHashSet<TMajorGetter> ExtentRecords { get; }
+        public bool IsInjected { get => ModKey != FormKey.ModKey; }
 
         public MajorRecordGraphBase(IPatcherState<TMod, TModGetter> state, in FormKey formKey)
         {
@@ -39,8 +41,9 @@ namespace leveledlistresolver
             var contextDictionary = modContexts.ToImmutableSortedDictionary(ctx => ctx.ModKey, ctx => ctx.Record, comparer);
             var mastersDictionary = modKeys.SelectWhere<ModKey, TModGetter?>(state.LoadOrder.TryGetIfEnabledAndExists).NotNull()
                 .ToDictionary(mod => mod.ModKey, mod => mod.MasterReferences.Select(refr => refr.Master).Intersect(modKeys).ToHashSet());
-            
-            Base = contextDictionary[formKey.ModKey];
+
+            ModKey = modContexts[0].ModKey;
+            Base = contextDictionary[ModKey];
 
             var adjancentBuilder = modKeys.ToImmutableDictionary(key => key, key => new HashSet<ModKey>()).ToBuilder();
 
@@ -104,7 +107,7 @@ namespace leveledlistresolver
 
         public override string ToString()
         {
-            return ToString(FormKey.ModKey);
+            return ToString(ModKey);
         }
 
         public string ToString(in ModKey startPoint) 
@@ -112,7 +115,8 @@ namespace leveledlistresolver
             if (Adjacents.ContainsKey(startPoint) is false)
                 return string.Empty;
 
-            StringBuilder builder = new($"{GetEditorID()} [{FormKey}]");
+            string header = IsInjected ? $"{GetEditorID()} [{FormKey} | Injected by {ModKey}]": $"{GetEditorID()} [{FormKey}]";
+            StringBuilder builder = new(header);
 
             var start = ImmutableList.Create(startPoint);
             var extents = Adjacents.Where(kvp => kvp.Value.Count is 0);
