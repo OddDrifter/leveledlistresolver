@@ -1,11 +1,12 @@
 ﻿using Mutagen.Bethesda;
+using Mutagen.Bethesda.Plugins;
 using Mutagen.Bethesda.Skyrim;
 using Mutagen.Bethesda.Synthesis;
 using Noggog;
 using System;
+using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
-using static MoreLinq.Extensions.BatchExtension;
 
 namespace leveledlistresolver
 {
@@ -114,8 +115,7 @@ namespace leveledlistresolver
             record.ChanceNone = GetChanceNone();
             record.Flags = GetFlags();
             record.Global.SetTo(GetGlobal());
-            //record.Entries = new(GetEntries());
-            record.Entries = GetEntries().ConvertAll(record => record.DeepCopy()).ToExtendedList();
+            record.Entries = new(GetEntries());
             return record;
         }
     }

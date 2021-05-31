@@ -1,4 +1,8 @@
 ﻿using Mutagen.Bethesda;
+using Mutagen.Bethesda.Plugins;
+using Mutagen.Bethesda.Plugins.Cache;
+using Mutagen.Bethesda.Plugins.Exceptions;
+using Mutagen.Bethesda.Plugins.Records;
 using Mutagen.Bethesda.Synthesis;
 using Noggog;
 using System;
@@ -39,7 +43,7 @@ namespace leveledlistresolver
             var comparer = ModKey.LoadOrderComparer(modKeys);
 
             var contextDictionary = modContexts.ToImmutableSortedDictionary(ctx => ctx.ModKey, ctx => ctx.Record, comparer);
-            var mastersDictionary = modKeys.SelectWhere<ModKey, TModGetter?>(state.LoadOrder.TryGetIfEnabledAndExists).NotNull()
+            var mastersDictionary = modKeys.Select(modKey => state.LoadOrder.TryGetIfEnabledAndExists(modKey, out var modGetter) ? modGetter : null).NotNull()
                 .ToDictionary(mod => mod.ModKey, mod => mod.MasterReferences.Select(refr => refr.Master).Intersect(modKeys).ToHashSet());
 
             ModKey = modContexts[0].ModKey;
@@ -113,7 +117,9 @@ namespace leveledlistresolver
         public string ToString(in ModKey startPoint) 
         {
             if (Adjacents.ContainsKey(startPoint) is false)
-                return string.Empty;
+            {
+                return $"Starting key \"{startPoint}\" was not in dictionary for {FormKey}";
+            }
 
             string header = IsInjected ? $"{GetEditorID()} [{FormKey} | Injected by {ModKey}]": $"{GetEditorID()} [{FormKey}]";
             StringBuilder builder = new(header);
