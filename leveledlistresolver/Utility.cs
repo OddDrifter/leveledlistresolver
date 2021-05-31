@@ -109,5 +109,15 @@ namespace leveledlistresolver
 
             return modKeys.Except(masters).Count;
         }
+
+        internal static void Deconstruct<TMod, TModGetter, TMajor, TMajorGetter>(this IModContext<TMod, TModGetter, TMajor, TMajorGetter> modContext, out ModKey modKey, out TMajorGetter record)
+            where TMod : class, IMod, TModGetter
+            where TModGetter : class, IModGetter
+            where TMajor : class, IMajorRecordCommon, TMajorGetter
+            where TMajorGetter : class, IMajorRecordCommonGetter
+        {
+            modKey = modContext.ModKey;
+            record = modContext.Record;
+        }
     }
 }

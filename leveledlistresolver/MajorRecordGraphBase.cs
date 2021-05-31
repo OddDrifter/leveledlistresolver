@@ -40,14 +40,11 @@ namespace leveledlistresolver
             var modContexts = linkCache.ResolveAllContexts<TMajor, TMajorGetter>(formKey).ToImmutableList().Reverse();
             var modKeys = modContexts.ConvertAll(static ctx => ctx.ModKey);
 
-            var comparer = ModKey.LoadOrderComparer(modKeys);
+            (ModKey, Base) = modContexts[0];
 
-            var contextDictionary = modContexts.ToImmutableSortedDictionary(ctx => ctx.ModKey, ctx => ctx.Record, comparer);
+            var contextDictionary = modContexts.ToImmutableDictionary(ctx => ctx.ModKey, ctx => ctx.Record);
             var mastersDictionary = modKeys.Select(modKey => state.LoadOrder.TryGetIfEnabledAndExists(modKey, out var modGetter) ? modGetter : null).NotNull()
                 .ToDictionary(mod => mod.ModKey, mod => mod.MasterReferences.Select(refr => refr.Master).Intersect(modKeys).ToHashSet());
-
-            ModKey = modContexts[0].ModKey;
-            Base = contextDictionary[ModKey];
 
             var adjancentBuilder = modKeys.ToImmutableDictionary(key => key, key => new HashSet<ModKey>()).ToBuilder();
 
@@ -65,6 +62,8 @@ namespace leveledlistresolver
             }
 
             Adjacents = adjancentBuilder.ToImmutable();
+            
+            var comparer = ModKey.LoadOrderComparer(modKeys);
 
             var extentMods = Adjacents.Where(kvp => kvp.Value is { Count: 0 } || kvp.Value.Contains(patchMod.ModKey)).Select(kvp => kvp.Key);
             var extentMasters = extentMods.Aggregate(modKeys, (list, modKey) => list.FindAll(key => mastersDictionary[modKey].Contains(key))).Sort(comparer);
@@ -82,7 +81,7 @@ namespace leveledlistresolver
 
         public string GetEditorID()
         {
-            if (ExtentRecords.LastOrDefault(record => record.EditorID?.Equals(Base.EditorID, StringComparison.InvariantCulture) ?? false)?.EditorID is { } editorID)
+            if (ExtentRecords.LastOrDefault(record => (record.EditorID?.Equals(Base.EditorID, StringComparison.InvariantCulture) ?? false) is false)?.EditorID is { } editorID)
             {
                 return editorID;
             }
