@@ -33,8 +33,9 @@ namespace leveledlistresolver
             return ExtentRecords.LastOrDefault(record => record.Global != Base.Global)?.Global ?? Base.Global;
         }
 
-        /*public IEnumerable<LeveledItemEntry> GetEntries()
+        public IEnumerable<LeveledItemEntry> GetEntries()
         {
+            //Todo: If ExtentRecords.Count is 1, find entries that were removed to get to it
             if (ExtentRecords.Count is 1)
             {
                 if (ExtentRecords.Single().Entries is { } entries)
@@ -50,18 +51,17 @@ namespace leveledlistresolver
             var baseEntries = ExtentBase.Entries ?? Array.Empty<ILeveledItemEntryGetter>();
             var entriesList = ExtentRecords.Select(list => list.Entries?.ToList() ?? new());
 
-            List<LeveledItemEntry> itemsYielded = new();
+            List<LeveledItemEntry> yieldedItems = new();
             List<LeveledItemEntry> extraItems = new();
 
             foreach (var entries in entriesList)
             {
-                var entriesAdded = entries.Without(baseEntries).Without(itemsYielded).ToImmutableArray();
-                foreach (var item in entriesAdded)
+                foreach (var item in entries.Without(baseEntries).Without(yieldedItems))
                 {
                     var _item = item.DeepCopy();
-                    if (itemsYielded.Count < 254)
+                    if (yieldedItems.Count < 254)
                     {
-                        itemsYielded.Add(_item);
+                        yieldedItems.Add(_item);
                         yield return _item;
                     }
                     else
@@ -71,18 +71,18 @@ namespace leveledlistresolver
                 }
             }
 
-            var itemsIntersected = entriesList.Aggregate(ImmutableList.CreateRange(baseEntries), static (list, items) =>
+            var commonItems = entriesList.Aggregate(ImmutableList.CreateRange(baseEntries), static (list, items) =>
             {
                 var toRemove = items;
                 return list.FindAll(toRemove.Remove);
             });
 
-            foreach (var item in itemsIntersected)
+            foreach (var item in commonItems)
             {
                 var _item = item.DeepCopy();
-                if (itemsYielded.Count < 254)
+                if (yieldedItems.Count < 254)
                 {
-                    itemsYielded.Add(_item);
+                    yieldedItems.Add(_item);
                     yield return _item;
                     continue;
                 }
@@ -95,70 +95,15 @@ namespace leveledlistresolver
                 yield return _(extraItems.ToArray());
             }
 
-            LeveledItemEntry _(ILeveledItemEntryGetter[] items, uint depth = 1) 
+            LeveledItemEntry _(LeveledItemEntry[] items, uint depth = 1) 
             {
-                var entries = items.Length switch
-                {
-                    > 255 => items[0..254].And(_(items[255..], depth + 1)),
-                    _ => items
-                };
-
                 var leveledItem = patchMod.LeveledItems.AddNew();
                 leveledItem.EditorID = $"Mir_{GetEditorID()}_Sublist_{depth}";
-                leveledItem.Entries = new(entries.Select(r => r.DeepCopy()));
+                leveledItem.Entries = new(items.Length > 255 ? items[0..254].Append(_(items[255..], depth++)) : items);
                 leveledItem.Flags = GetFlags();
                 leveledItem.Global.SetTo(GetGlobal());
                 return new() { Data = new() { Reference = leveledItem.AsLink(), Level = 1, Count = 1 } };
             }
-        }*/
-
-        public ImmutableList<ILeveledItemEntryGetter> GetEntries()
-        {
-            if (ExtentRecords.Count is 1)
-                return ExtentRecords.Single().Entries?.ToImmutableList() ?? ImmutableList<ILeveledItemEntryGetter>.Empty;
-
-            var baseEntries = ExtentBase.Entries ?? Array.Empty<ILeveledItemEntryGetter>();
-            var entriesList = ExtentRecords.Select(list => list.Entries?.ToList() ?? new());
-           
-            var added = entriesList.Aggregate(ImmutableList.CreateBuilder<ILeveledItemEntryGetter>(), (builder, items) =>
-            {
-                builder.AddRange(items.Without(baseEntries).Without(builder));
-                return builder;
-            }).ToImmutable();
-
-            var intersection = entriesList.Aggregate(ImmutableList.CreateRange(baseEntries), static (list, items) =>
-            {
-                var toRemove = items;
-                return list.FindAll(toRemove.Remove);
-            });
-
-            var items = added.AddRange(intersection).RemoveAll(entry => entry.IsNullOrEmptySublist(linkCache));
-
-            if (items.Count > 255)
-            {
-                Console.WriteLine($"{GetEditorID()} had more than 255 items.");
-
-                var segments = ((items.Count - 255) / 255) + 1;
-                var extraItems = items.RemoveRange(0, 255 - segments);
-                
-                var entries = extraItems.Batch(255).Select((items, index) => 
-                {
-                    var leveledItem = patchMod.LeveledItems.AddNew();
-                    leveledItem.EditorID = $"Mir_{GetEditorID()}_Sublist_{index + 1}";
-                    leveledItem.Entries = items.Select(r => r.DeepCopy()).ToExtendedList();
-                    leveledItem.Flags = GetFlags();
-                    leveledItem.Global.SetTo(GetGlobal());
-
-                    return new LeveledItemEntry()
-                    {
-                        Data = new() { Reference = leveledItem.AsLink(), Level = 1, Count = 1 }
-                    };
-                });
-
-                return items.GetRange(0, 255 - segments).AddRange(entries);
-            }
-
-            return items;
         }
 
         public override LeveledItem ToMajorRecord()
