@@ -80,33 +80,13 @@ namespace leveledlistresolver
             return gameRelease.GetDefaultFormVersion() ?? Base.FormVersion ?? throw RecordException.Enrich(new NullReferenceException("FormVersion was Null"), Base);
         }
 
-        public uint GetVersionControl()
-        {
-            var formVersion = GetFormVersion();
-
-            return formVersion switch
-            {
-                43 => _le(),
-                44 => _sse(),
-                _ => throw new NotImplementedException()
-            };
-
-            static uint _le()
-            {
-                return 0;
-            }
-
-            static uint _sse() {
-                DateTime date = DateTime.Now;
-                return Convert.ToUInt32(((date.Year - 2000) << 9) + (date.Month << 5) + date.Day);
-            }          
-        }
-
         public string GetEditorID()
         {
-            return ExtentRecords.LastOrDefault(record => 
-                (record.EditorID?.Equals(Base.EditorID, StringComparison.InvariantCulture) ?? false) is false
-            )?.EditorID ?? Base.EditorID ?? Guid.NewGuid().ToString();
+            if (ExtentRecords.LastOrDefault(record => record.EditorID?.Equals(Base.EditorID, StringComparison.InvariantCulture) ?? false)?.EditorID is { } editorID)
+            {
+                return editorID;
+            }
+            return Base.EditorID ?? Guid.NewGuid().ToString();
         }
 
         public override string ToString()
