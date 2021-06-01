@@ -53,7 +53,7 @@ namespace leveledlistresolver
 
             if (items.Count > 255)
             {
-                Console.WriteLine($"{GetEditorID()} had more than 255 items.");
+                Console.WriteLine($"{GetEditorID()} had more than 255 entries.");
 
                 var segments = ((items.Count - 255) / 255) + 1;
                 var extraItems = items.RemoveRange(0, 255 - segments);

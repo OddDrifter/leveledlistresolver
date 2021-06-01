@@ -59,15 +59,18 @@ namespace leveledlistresolver
             {
                 foreach (var item in entries.Without(baseEntries).Without(yieldedItems))
                 {
-                    var _item = item.DeepCopy();
-                    if (yieldedItems.Count < 254)
+                    if (item.IsNullOrEmptySublist(linkCache) is false)
                     {
-                        yieldedItems.Add(_item);
-                        yield return _item;
-                    }
-                    else
-                    {
-                        extraItems.Add(_item);
+                        var _item = item.DeepCopy();
+                        if (yieldedItems.Count < 254)
+                        {
+                            yieldedItems.Add(_item);
+                            yield return _item;
+                        }
+                        else
+                        {
+                            extraItems.Add(_item);
+                        }
                     }
                 }
             }
@@ -76,7 +79,7 @@ namespace leveledlistresolver
             {
                 var toRemove = items;
                 return list.FindAll(toRemove.Remove);
-            });
+            }).RemoveAll(entry =>  entry.IsNullOrEmptySublist(linkCache));
 
             foreach (var item in commonItems)
             {
@@ -92,7 +95,7 @@ namespace leveledlistresolver
 
             if (extraItems.Any())
             {
-                Console.WriteLine($"{GetEditorID()} had more than 255 items.");
+                Console.WriteLine($"{GetEditorID()} had more than 255 entries.");
                 yield return _(extraItems.ToArray());
             }
 
@@ -100,7 +103,7 @@ namespace leveledlistresolver
             {
                 var leveledItem = patchMod.LeveledItems.AddNew();
                 leveledItem.EditorID = $"Mir_{GetEditorID()}_Sublist_{depth}";
-                leveledItem.Entries = new(items.Length > 255 ? items[0..254].Append(_(items[255..], depth++)) : items);
+                leveledItem.Entries = new(items.Length > 255 ? items[0..254].Append(_(items[255..], ++depth)) : items);
                 leveledItem.Flags = GetFlags();
                 leveledItem.Global.SetTo(GetGlobal());
                 return new() { Data = new() { Reference = leveledItem.AsLink(), Level = 1, Count = 1 } };
