@@ -92,7 +92,7 @@ namespace leveledlistresolver
         }
 
         internal static int CountExtents<TMajor, TMajorGetter>(IPatcherState<ISkyrimMod, ISkyrimModGetter> state, in FormKey formKey) 
-            where TMajor : class, IMajorRecordCommon, TMajorGetter where TMajorGetter : class, IMajorRecordCommonGetter
+            where TMajor : class, IMajorRecord, TMajorGetter where TMajorGetter : class, IMajorRecordGetter
         {
             var modKeys = state.LinkCache.ResolveAllContexts<TMajor, TMajorGetter>(formKey)
                 .Select(context => context.ModKey)
@@ -113,8 +113,8 @@ namespace leveledlistresolver
         internal static void Deconstruct<TMod, TModGetter, TMajor, TMajorGetter>(this IModContext<TMod, TModGetter, TMajor, TMajorGetter> modContext, out ModKey modKey, out TMajorGetter record)
             where TMod : class, IMod, TModGetter
             where TModGetter : class, IModGetter
-            where TMajor : class, IMajorRecordCommon, TMajorGetter
-            where TMajorGetter : class, IMajorRecordCommonGetter
+            where TMajor : class, IMajorRecord, TMajorGetter
+            where TMajorGetter : class, IMajorRecordGetter
         {
             modKey = modContext.ModKey;
             record = modContext.Record;

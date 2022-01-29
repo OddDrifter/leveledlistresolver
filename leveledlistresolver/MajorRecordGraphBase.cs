@@ -16,8 +16,8 @@ namespace leveledlistresolver
     public abstract class MajorRecordGraphBase<TMod, TModGetter, TMajor, TMajorGetter>
         where TMod : class, IMod, TModGetter
         where TModGetter : class, IModGetter
-        where TMajor : class, IMajorRecordCommon, TMajorGetter
-        where TMajorGetter : class, IMajorRecordCommonGetter
+        where TMajor : class, IMajorRecord, TMajorGetter
+        where TMajorGetter : class, IMajorRecordGetter
     {
         protected readonly TMod patchMod;
         protected readonly GameRelease gameRelease;
