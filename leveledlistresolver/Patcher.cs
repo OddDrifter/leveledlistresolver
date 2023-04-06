@@ -98,6 +98,8 @@ namespace leveledlistresolver
                         Console.WriteLine($"Skipping {copy.EditorID}");
                         continue;
                     }
+                    
+                    state.PatchMod.LeveledSpells.Set(copy);
                 }
             }
         }      
