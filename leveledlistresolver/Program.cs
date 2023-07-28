@@ -13,7 +13,7 @@ namespace leveledlistresolver
     {
         private static async Task<int> Main(string[] args)
         {
-            return await SynthesisPipeline.Instance.SetTypicalOpen(GameRelease.SkyrimSE, new("Leveled Lists.esp", ModType.LightMaster))
+            return await SynthesisPipeline.Instance.SetTypicalOpen(GameRelease.SkyrimSE, new("Leveled Lists", ModType.Plugin))
                 .AddPatch<ISkyrimMod, ISkyrimModGetter>(Apply)
                 .Run(args);
         }
