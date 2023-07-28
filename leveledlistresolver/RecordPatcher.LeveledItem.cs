@@ -101,6 +101,7 @@ namespace leveledlistresolver
                     };
 
                     copy.Entries.Add(entry);
+                    i++;
                 }
             }
             else
