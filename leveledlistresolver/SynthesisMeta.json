@@ -4,5 +4,6 @@
   "OneLineDescription": "A Patcher for resolving leveled list conflicts without the use of Bash Tags.",
   "LongDescription": "This patcher attempts to recreate Wyre Bash's leveled list functionality in a way the does not require tagging plugins. Results aren't guaranteed to 100% identical to Wyre Bash.",
   "PreferredAutoVersioning": "Default",
-  "RequiredMods": []
+  "RequiredMods": [],
+  "TargetedReleases": []
 }
