@@ -19,29 +19,22 @@ namespace leveledlistresolver
     {
         public static uint Timestamp { get; } = (uint)(Math.Max(1, DateTime.Today.Year - 2000) << 9 | DateTime.Today.Month << 5 | DateTime.Today.Day);
         
-        internal static IEnumerable<T> IntersectWith<T>(this IEnumerable<T> source, IEnumerable<T>? other, IEqualityComparer<T>? comparer = null)
+        internal static IEnumerable<T> IntersectWith<T>(this IEnumerable<T> source, IEnumerable<T>? other, IEqualityComparer<T>? comparer = null) where T : class
         {
             var _comparer = comparer ?? EqualityComparer<T>.Default;
 
-            if (other == null || !other.Any())
-            {
+            if (!source.Any() || other == null || !other.Any())
                 yield break;
-            }
 
             var set = new HashSet<T>(source, _comparer);
-            var lookup = other.ToLookup(u => u, _comparer);
-
-            if (set.Count is 0 || lookup.Count is 0)
-            {
-                yield break;
-            }
+            var dictionary = other.GroupBy(i => i, _comparer).ToDictionary(i => i.Key, i => i.Count(), _comparer);
 
             foreach (var it in set)
             {
-                var lookupCount = lookup[it].Count();
                 var sourceCount = source.Count(u => _comparer.Equals(u, it));
+                var otherCount = dictionary.GetValueOrDefault(it);
 
-                foreach (var item in Enumerable.Repeat(it, Math.Min(lookupCount, sourceCount)))
+                foreach (var item in Enumerable.Repeat(it, Math.Min(sourceCount, otherCount)))
                 {
                     yield return item;
                 }
@@ -121,27 +114,26 @@ namespace leveledlistresolver
             return entry is { Data: null or { Reference.IsNull: true } };
         }
 
-        //internal static bool IsNullOrEmptySublist(this ILeveledItemEntryGetter entry, ILinkCache linkCache)
-        //{
-        //    if (entry is { Data: null or { Reference.IsNull: true } })
-        //        return true;
-        //    return entry.Data.Reference.TryResolve<ILeveledItemGetter>(linkCache) is { Entries: null or { Count: 0 } };
-        //}
+        internal static bool IsNullOrEmptySublist(this ILeveledItemEntryGetter entry, ILinkCache linkCache)
+        {
+            if (entry is { Data: null or { Reference.IsNull: true } })
+                return true;
+            return entry.Data.Reference.TryResolve<ILeveledItemGetter>(linkCache) is { Entries: null or { Count: 0 } };
+        }
 
-        //internal static bool IsNullOrEmptySublist(this ILeveledNpcEntryGetter entry, ILinkCache<ISkyrimMod, ISkyrimModGetter> linkCache)
-        //{
-        //    if (entry is { Data: null or { Reference.IsNull: true } })
-        //        return true;
-        //    return entry.Data.Reference.TryResolve<ILeveledNpcGetter>(linkCache) is { Entries: null or { Count: 0 } };
-        //}
+        internal static bool IsNullOrEmptySublist(this ILeveledNpcEntryGetter entry, ILinkCache<ISkyrimMod, ISkyrimModGetter> linkCache)
+        {
+            if (entry is { Data: null or { Reference.IsNull: true } })
+                return true;
+            return entry.Data.Reference.TryResolve<ILeveledNpcGetter>(linkCache) is { Entries: null or { Count: 0 } };
+        }
 
-        //internal static bool IsNullOrEmptySublist(this ILeveledSpellEntryGetter entry, ILinkCache<ISkyrimMod, ISkyrimModGetter> linkCache)
-        //{
-        //    if (entry is { Data: null or { Reference.IsNull: true } })
-        //        return true;
-        //    return entry.Data.Reference.TryResolve<ILeveledSpellGetter>(linkCache) is { Entries: null or { Count: 0 } };
-        //}
-
+        internal static bool IsNullOrEmptySublist(this ILeveledSpellEntryGetter entry, ILinkCache<ISkyrimMod, ISkyrimModGetter> linkCache)
+        {
+            if (entry is { Data: null or { Reference.IsNull: true } })
+                return true;
+            return entry.Data.Reference.TryResolve<ILeveledSpellGetter>(linkCache) is { Entries: null or { Count: 0 } };
+        }
 
         internal static TGet GetLowestOverride<TGet>(this ILinkCache<ISkyrimMod, ISkyrimModGetter> linkCache, FormKey formKey) where TGet : class, IMajorRecordGetter
         {

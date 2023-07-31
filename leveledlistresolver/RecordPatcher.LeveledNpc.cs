@@ -84,7 +84,10 @@ namespace leveledlistresolver
 
             entries.AddRange(intersection);
             entries.AddRange(disjunction);
-            entries.RemoveAll(static i => i.IsNullEntry());
+            if (Program.Settings.RemoveEmptySublists)
+                entries.RemoveAll(i => i.IsNullOrEmptySublist(state.LinkCache));
+            else
+                entries.RemoveAll(Utility.IsNullEntry);
             entries.Sort(static (i, k) => (i.Data?.Level ?? 0).CompareTo(k.Data?.Level));
 
             if (entries.Count > 255)
