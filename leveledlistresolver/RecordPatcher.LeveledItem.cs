@@ -33,7 +33,17 @@ namespace leveledlistresolver
 
             var extentContexts = state.LinkCache.GetExtentContexts<ILeveledItemGetter>(formKey).ToArray();
             if (extentContexts.Length < 2)
+            {
+                var winning = extentContexts[0].Record;
+                if (winning.Entries?.Any(static i => i.IsNullEntry()) ?? false)
+                {
+                    setter = winning.DeepCopy();
+                    Console.WriteLine($"Removed {setter.Entries!.RemoveAll(Utility.IsNullEntry)} null entries from {setter.EditorID} [{formKey}]{Environment.NewLine}");
+                    return true;
+                }
+
                 return false;
+            }
 
             var highest = extentContexts[0].Record;
             var lowest = state.LinkCache.GetLowestOverride<ILeveledItemGetter>(formKey);
