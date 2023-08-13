@@ -18,7 +18,7 @@ namespace leveledlistresolver
     {
         public static uint Timestamp { get; } = (uint)(Math.Max(1, DateTime.Today.Year - 2000) << 9 | DateTime.Today.Month << 5 | DateTime.Today.Day);
         
-        internal static IEnumerable<T> IntersectWith<T>(this IEnumerable<T> source, IEnumerable<T>? other, IEqualityComparer<T>? comparer = null) where T : class
+        internal static IEnumerable<T> IntersectExt<T>(this IEnumerable<T> source, IEnumerable<T>? other, IEqualityComparer<T>? comparer = null) where T : class
         {
             var _comparer = comparer ?? EqualityComparer<T>.Default;
 
@@ -26,16 +26,27 @@ namespace leveledlistresolver
                 yield break;
 
             var set = new HashSet<T>(source, _comparer);
-            var dictionary = other.GroupBy(i => i, _comparer).ToDictionary(i => i.Key, i => i.Count(), _comparer);
+            set.IntersectWith(other);
+            var dict = new Dictionary<T, int>(_comparer);
 
-            foreach (var it in set)
+            foreach (var it in other)
             {
-                var sourceCount = source.Count(u => _comparer.Equals(u, it));
-                var otherCount = dictionary.GetValueOrDefault(it);
+                if (!set.Contains(it))
+                    continue;
 
-                foreach (var item in Enumerable.Repeat(it, Math.Min(sourceCount, otherCount)))
+                if (!dict.TryAdd(it, 1))
+                    dict[it]++;
+            }
+
+            foreach (var it in source)
+            {
+                if (dict.TryGetValue(it, out int count) && count > 0)
                 {
-                    yield return item;
+                    count--;
+                    dict[it] = count;
+                    if (count <= 0)
+                        dict.Remove(it);
+                    yield return it;
                 }
             }
         }

@@ -79,12 +79,17 @@ namespace leveledlistresolver
             }
 
             List<ILeveledNpcEntryGetter> entries = new();
-            var intersection = (lowest.Entries ?? Array.Empty<ILeveledNpcEntryGetter>()).IntersectWith(extentContexts[1..].Aggregate(extentContexts[0].Record.Entries ?? Enumerable.Empty<ILeveledNpcEntryGetter>(), (i, k) => i.IntersectWith(k.Record.Entries)));
-            var disjunction = extentContexts.Aggregate(Enumerable.Empty<ILeveledNpcEntryGetter>(), (i, k) => i.Concat(k.Record.Entries?.DisjunctLeft(lowest.Entries).DisjunctLeft(i) ?? Enumerable.Empty<ILeveledNpcEntryGetter>()));
+            if (lowest.Entries is { Count: > 0 } && extentContexts.All(static i => i.Record.Entries is { Count: > 0 }))
+            {
+                var e = (IEnumerable<ILeveledNpcEntryGetter>)lowest.Entries!;
+                var intersection = extentContexts.Aggregate(e, (i, k) => i.IntersectExt(k.Record.Entries));
+                entries.AddRange(intersection);
+            }
 
-            entries.AddRange(intersection);
+            var disjunction = extentContexts.Aggregate(Enumerable.Empty<ILeveledNpcEntryGetter>(), (i, k) => i.Concat(k.Record.Entries?.DisjunctLeft(lowest.Entries).DisjunctLeft(i) ?? Enumerable.Empty<ILeveledNpcEntryGetter>()));
             entries.AddRange(disjunction);
             if (Program.Settings.RemoveEmptySublists)
+
                 entries.RemoveAll(i => i.IsNullOrEmptySublist(state.LinkCache));
             else
                 entries.RemoveAll(Utility.IsNullEntry);
