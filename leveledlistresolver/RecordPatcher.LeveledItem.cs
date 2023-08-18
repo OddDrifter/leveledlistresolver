@@ -31,7 +31,7 @@ namespace leveledlistresolver
         {
             setter = default;
 
-            var extentContexts = state.LinkCache.GetExtentContexts<ILeveledItemGetter>(formKey).ToArray();
+            var extentContexts = Program.LinkCache.GetExtentContexts<ILeveledItemGetter>(formKey).ToArray();
             if (extentContexts.Length < 2)
             {
                 var winning = extentContexts[0].Record;
@@ -46,7 +46,7 @@ namespace leveledlistresolver
             }
 
             var highest = extentContexts[0].Record;
-            var lowest = state.LinkCache.GetLowestOverride<ILeveledItemGetter>(formKey);
+            var lowest = Program.LinkCache.GetLowestOverride<ILeveledItemGetter>(formKey);
 
             var copy = highest.DeepCopy();
             copy.FormVersion = 44;
@@ -91,7 +91,7 @@ namespace leveledlistresolver
             entries.AddRange(disjunction);
 
             if (Program.Settings.RemoveEmptySublists)
-                entries.RemoveAll(i => i.IsNullOrEmptySublist(state.LinkCache));
+                entries.RemoveAll(i => i.IsNullOrEmptySublist(Program.LinkCache));
             else
                 entries.RemoveAll(Utility.IsNullEntry);
             entries.Sort(static (i, k) => (i.Data?.Level ?? 0).CompareTo(k.Data?.Level));
