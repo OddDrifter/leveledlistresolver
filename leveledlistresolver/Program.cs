@@ -1,8 +1,11 @@
 ﻿using Mutagen.Bethesda;
 using Mutagen.Bethesda.Plugins;
+using Mutagen.Bethesda.Plugins.Cache;
 using Mutagen.Bethesda.Skyrim;
 using Mutagen.Bethesda.Synthesis;
+using Noggog;
 using System;
+using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Threading.Tasks;
@@ -13,6 +16,8 @@ namespace leveledlistresolver
     {
         private static Lazy<ProgramSettings>? _settings;
         public static ProgramSettings Settings { get => _settings?.Value ?? throw new ArgumentNullException(); }
+
+        public static ILinkCache<ISkyrimMod, ISkyrimModGetter> LinkCache { get; set; }
 
         private static async Task<int> Main(string[] args)
         {
@@ -28,7 +33,35 @@ namespace leveledlistresolver
 
             using var loadOrder = state.LoadOrder;
 
-            var linkCache = state.LinkCache;
+            loadOrder.Items.Select(static i => i.Mod).NotNull()
+                .Where(static i => string.Equals(i.ModHeader.Author, "Bashed Patch", StringComparison.OrdinalIgnoreCase))
+                .Where(static i => i.LeveledItems.Any() || i.LeveledNpcs.Any() || i.LeveledSpells.Any())
+                .ForEach(i => Settings.BlacklistedPlugins.Add(i.ModKey));
+
+            bool removed = Settings.BlacklistedPlugins.Any();
+            while (removed)
+            {
+                removed = false;
+                foreach (var listing in loadOrder.Items)
+                {
+                    if (listing is not { Enabled: true, ExistsOnDisk: true, Mod: { } })
+                        continue;
+
+                    if (listing.Mod.MasterReferences.Any(i => Settings.BlacklistedPlugins.Contains(i.Master)))
+                    {
+                        if (Settings.BlacklistedPlugins.Add(listing.ModKey))
+                            removed = true;
+                    }
+                }
+            }
+
+            foreach (var (plugin, last) in Settings.BlacklistedPlugins.IterateMarkLast())
+            {
+                if (loadOrder.RemoveKey(plugin))
+                    Console.WriteLine($"{plugin} was blacklisted{(last ? Environment.NewLine : string.Empty)}");
+            }
+            LinkCache = loadOrder.ToMutableLinkCache(state.PatchMod);
+
             var enabledAndExisting = loadOrder.PriorityOrder.OnlyEnabledAndExisting().ToImmutableArray();
             var comparer = ModKey.LoadOrderComparer(loadOrder.Keys.ToImmutableArray());
 
